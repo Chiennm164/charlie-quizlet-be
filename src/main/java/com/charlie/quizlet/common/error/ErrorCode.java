@@ -30,7 +30,13 @@ public enum ErrorCode {
 
     STUDY_SET_NOT_FOUND(HttpStatus.NOT_FOUND, "Study set not found"),
     STUDY_SET_DUPLICATE_TERM(HttpStatus.BAD_REQUEST, "Some terms are duplicated"),
-    STUDY_SET_CARD_NOT_FOUND(HttpStatus.BAD_REQUEST, "A card does not belong to this study set");
+    STUDY_SET_CARD_NOT_FOUND(HttpStatus.BAD_REQUEST, "A card does not belong to this study set"),
+
+    QUIZ_NOT_FOUND(HttpStatus.NOT_FOUND, "Quiz not found"),
+    QUIZ_CORRECT_OPTION_REQUIRED(HttpStatus.BAD_REQUEST, "Each question needs exactly one correct answer"),
+    QUIZ_DUPLICATE_OPTION(HttpStatus.BAD_REQUEST, "A question has duplicated answers"),
+    QUIZ_EMPTY(HttpStatus.BAD_REQUEST, "The quiz has no questions"),
+    QUIZ_ITEM_NOT_FOUND(HttpStatus.BAD_REQUEST, "A question or answer does not belong to this quiz");
 
     private final HttpStatus defaultStatus;
     private final String defaultMessage;

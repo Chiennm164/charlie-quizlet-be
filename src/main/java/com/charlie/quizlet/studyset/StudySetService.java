@@ -10,11 +10,11 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.charlie.quizlet.common.SearchPatterns;
+import com.charlie.quizlet.common.dto.PageRequests;
 import com.charlie.quizlet.common.dto.PageResponse;
 import com.charlie.quizlet.common.error.BusinessException;
 import com.charlie.quizlet.common.error.ErrorCode;
@@ -30,8 +30,6 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class StudySetService {
-
-    static final int MAX_PAGE_SIZE = 50;
 
     private final StudySetRepository studySetRepository;
     private final UserRepository userRepository;
@@ -55,8 +53,8 @@ public class StudySetService {
     @Transactional(readOnly = true)
     public PageResponse<StudySetSummaryResponse> listMine(Long userId, String query, StudySetSort sort, int page,
             int size) {
-        Pageable pageable = PageRequest.of(Math.max(page, 0), Math.clamp(size, 1, MAX_PAGE_SIZE), sort.sort());
-        return PageResponse.from(studySetRepository.findSummaries(userId, containsPattern(query), pageable));
+        return PageResponse.from(studySetRepository.findSummaries(userId, SearchPatterns.contains(query),
+                PageRequests.of(page, size, sort.sort())));
     }
 
     @Transactional(readOnly = true)
@@ -138,12 +136,6 @@ public class StudySetService {
 
         set.getCards().clear();
         set.getCards().addAll(ordered);
-    }
-
-    /** Pattern LIKE "chứa chuỗi": escape %, _ và dấu \ để người dùng gõ các ký tự này được tìm đúng nghĩa đen. */
-    static String containsPattern(String query) {
-        String q = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
-        return "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
     }
 
     /** Trùng sau khi bỏ khoảng trắng đầu / cuối, không phân biệt hoa thường. */

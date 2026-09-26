@@ -14,7 +14,8 @@ src/main/java/com/charlie/quizlet/
 ├── auth/              # đăng ký, đăng nhập, JWT, refresh token; reset/ = quên / đặt lại mật khẩu
 ├── user/              # User entity, Role, UserStatus, UserResponse
 ├── admin/             # AdminAccountInitializer (tạo Admin lúc khởi động), duyệt tài khoản chờ duyệt
-└── studyset/          # học phần (StudySet) + thẻ (Card)
+├── studyset/          # học phần (StudySet) + thẻ (Card)
+└── quiz/              # bộ đề (Quiz) + câu hỏi (Question) + đáp án (QuestionOption)
 src/main/resources/
 ├── application.yml                 # cấu hình (app.* -> AppProperties)
 ├── ValidationMessages_vi.properties  # câu lỗi validate tiếng Việt
@@ -97,7 +98,8 @@ public class StudySetController {
 }
 ```
 
-- Danh sách có phân trang: trả `PageResponse.from(page)` (`common/dto`), không trả thẳng `Page` của Spring Data. Cho sort bằng enum (vd. `StudySetSort`), không nhận tên cột từ client.
+- Cần id + role người gọi (vd. Admin được sửa mọi thứ): `CurrentUser.from(jwt)` (`auth/CurrentUser`) — lấy từ token, không đọc lại DB.
+- Danh sách có phân trang: `PageRequests.of(page, size, sort)` + trả `PageResponse.from(page)` (`common/dto`); tìm "chứa chuỗi" dùng `SearchPatterns.contains(q)`, không trả thẳng `Page` của Spring Data. Cho sort bằng enum (vd. `StudySetSort`), không nhận tên cột từ client.
 - Endpoint công khai: thêm path vào `ApiPaths.PUBLIC_GET` / `PUBLIC_POST` và thêm `@SecurityRequirements` (rỗng) vào method.
 - Phân quyền theo role: claim `role` đã map thành `ROLE_*` → dùng `.requestMatchers(...).hasRole("TEACHER")` trong `SecurityConfig` (vd. `ApiPaths.ADMIN_ALL` → `hasRole("ADMIN")`). Muốn dùng `@PreAuthorize("hasRole('ADMIN')")` trên method thì bật `@EnableMethodSecurity` (hiện chưa bật).
 - Xong API: kiểm tra trên Swagger UI (`/swagger-ui.html`), cập nhật bảng API trong README, báo FE thêm `API_ENDPOINTS` + model.
@@ -139,7 +141,8 @@ src/main/resources/db/migration/
   V5__add_admin_error_codes.sql
   V6__add_change_password_error_code.sql
   V7__create_study_sets.sql
-  V8__...                      ← thay đổi tiếp theo luôn là file mới
+  V8__create_quizzes.sql
+  V9__...                      ← thay đổi tiếp theo luôn là file mới
 ```
 
 - Chạy tự động khi khởi động app (và khi chạy `CharlieQuizletBeApplicationTests`).

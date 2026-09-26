@@ -26,6 +26,9 @@ import com.charlie.quizlet.common.error.ErrorCode;
 @Configuration
 public class SecurityConfig {
 
+    /** Role được soạn bộ đề. */
+    private static final String[] QUIZ_AUTHOR_ROLES = { "TEACHER", "ADMIN" };
+
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http,
             @Qualifier("handlerExceptionResolver") HandlerExceptionResolver exceptionResolver) throws Exception {
@@ -45,6 +48,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, ApiPaths.PUBLIC_GET).permitAll()
                         .requestMatchers(HttpMethod.POST, ApiPaths.PUBLIC_POST).permitAll()
                         .requestMatchers(ApiPaths.ADMIN_ALL).hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, ApiPaths.QUIZZES).hasAnyRole(QUIZ_AUTHOR_ROLES)
+                        .requestMatchers(HttpMethod.PUT, ApiPaths.QUIZ).hasAnyRole(QUIZ_AUTHOR_ROLES)
+                        .requestMatchers(HttpMethod.DELETE, ApiPaths.QUIZ).hasAnyRole(QUIZ_AUTHOR_ROLES)
+                        .requestMatchers(HttpMethod.GET, ApiPaths.QUIZZES_MINE).hasAnyRole(QUIZ_AUTHOR_ROLES)
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e.authenticationEntryPoint(unauthorized).accessDeniedHandler(forbidden))
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()).authenticationEntryPoint(unauthorized))

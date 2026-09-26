@@ -20,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
+import com.charlie.quizlet.common.dto.PageRequests;
 import com.charlie.quizlet.common.dto.PageResponse;
 import com.charlie.quizlet.common.error.BusinessException;
 import com.charlie.quizlet.common.error.ErrorCode;
@@ -132,15 +133,9 @@ class StudySetServiceTest {
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
         verify(studySetRepository).findSummaries(eq(OWNER_ID), eq("%50\\%\\_off%"), pageable.capture());
         assertThat(pageable.getValue().getPageNumber()).isZero();
-        assertThat(pageable.getValue().getPageSize()).isEqualTo(StudySetService.MAX_PAGE_SIZE);
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(PageRequests.MAX_SIZE);
         assertThat(pageable.getValue().getSort()).isEqualTo(StudySetSort.TITLE.sort());
         assertThat(res.totalElements()).isZero();
-    }
-
-    @Test
-    void containsPatternEscapesBackslash() {
-        assertThat(StudySetService.containsPattern(null)).isEqualTo("%%");
-        assertThat(StudySetService.containsPattern("a\\b")).isEqualTo("%a\\\\b%");
     }
 
     @Test

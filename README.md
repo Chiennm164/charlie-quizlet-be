@@ -76,6 +76,25 @@ Cần đăng nhập. Học phần `PRIVATE` chỉ chủ xem được (người k
 - `id` thẻ không thuộc học phần (hoặc gửi 2 lần) → 400 `STUDY_SET_CARD_NOT_FOUND`.
 - Giữ `id` thẻ khi sửa để không mất dữ liệu gắn với thẻ (tiến độ ôn tập — giai đoạn 3).
 
+## Quiz API (bộ đề trắc nghiệm)
+
+Cần đăng nhập. **Tạo / sửa / xoá / "của tôi" chỉ `TEACHER`, `ADMIN`** (role khác → 403 `COMMON_FORBIDDEN`).
+Người soạn sửa / xoá đề của mình, `ADMIN` sửa / xoá mọi đề. Đề `DRAFT` chỉ người sửa được mới thấy (người khác 404 `QUIZ_NOT_FOUND`).
+
+| Method | Path | Mô tả |
+|---|---|---|
+| GET | `/api/quizzes?q=&sort=&page=&size=` | Đề đã xuất bản (mọi người). `sort`: `RECENT` \| `NEWEST` \| `TITLE` |
+| GET | `/api/quizzes/mine?q=&sort=&page=&size=` | Đề của tôi, cả nháp (TEACHER / ADMIN) |
+| POST | `/api/quizzes` | `{title, description?, timeLimitMinutes?, status, questions: [{content, explanation?, options: [{content, correct}]}]}` → 201 |
+| GET | `/api/quizzes/{id}` | Bộ đề. `questions` (kèm đáp án đúng) **chỉ có khi `canEdit`**; người làm bài nhận `questions: null` |
+| PUT | `/api/quizzes/{id}` | Gửi toàn bộ câu hỏi theo thứ tự mới; câu / đáp án có `id` được giữ, không có `id` là mới, cũ không gửi bị xoá |
+| DELETE | `/api/quizzes/{id}` | 204, xoá cả câu hỏi |
+
+- `status`: `DRAFT` (lưu được cả khi chưa có câu) \| `PUBLISHED` (cần ≥ 1 câu, không thì 400 `QUIZ_EMPTY`). `publishedAt` giữ lần xuất bản đầu, về nháp thì xoá.
+- `timeLimitMinutes`: 1–300, bỏ trống = không giới hạn. Tối đa 200 câu; mỗi câu 2–6 đáp án.
+- Mỗi câu **đúng 1** đáp án `correct` (400 `QUIZ_CORRECT_OPTION_REQUIRED`); đáp án trùng trong 1 câu → 400 `QUIZ_DUPLICATE_OPTION`.
+- `id` câu / đáp án không thuộc đề (hoặc gửi 2 lần) → 400 `QUIZ_ITEM_NOT_FOUND`.
+
 ## Admin API
 
 Chỉ role `ADMIN` (`/api/admin/**`, role khác → 403 `COMMON_FORBIDDEN`).
@@ -139,6 +158,7 @@ thêm vào `ERROR_CODES` ở `src/app/core/config/error-codes.ts` của repo FE.
 | Auth | `AUTH_INVALID_CREDENTIALS`, `AUTH_ACCOUNT_LOCKED`, `AUTH_ACCOUNT_PENDING`, `AUTH_USER_NOT_FOUND`, `AUTH_EMAIL_ALREADY_REGISTERED`, `AUTH_RESET_TOKEN_INVALID`, `AUTH_REFRESH_TOKEN_INVALID`, `AUTH_CURRENT_PASSWORD_INCORRECT` |
 | Admin | `ADMIN_USER_NOT_PENDING` |
 | Học phần | `STUDY_SET_NOT_FOUND`, `STUDY_SET_DUPLICATE_TERM`, `STUDY_SET_CARD_NOT_FOUND` |
+| Bộ đề | `QUIZ_NOT_FOUND`, `QUIZ_CORRECT_OPTION_REQUIRED`, `QUIZ_DUPLICATE_OPTION`, `QUIZ_EMPTY`, `QUIZ_ITEM_NOT_FOUND` |
 
 ## Cấu trúc
 
@@ -152,9 +172,10 @@ src/main/java/com/charlie/quizlet/
 ├── user/
 ├── admin/         # tạo Admin lúc khởi động, duyệt / từ chối tài khoản chờ duyệt
 ├── studyset/      # học phần + thẻ
+├── quiz/          # bộ đề trắc nghiệm: câu hỏi + đáp án (TEACHER / ADMIN soạn)
 └── <feature>/     # question, exam, flashcard...
 src/main/resources/
 ├── application.yml
 ├── ValidationMessages_vi.properties   # câu lỗi validate tiếng Việt
-└── db/migration/                      # Flyway: V1 users, V2 password_reset_tokens, V3 error_codes, V4 refresh_tokens, V5–V6 mã lỗi mới, V7 study_sets + cards
+└── db/migration/                      # Flyway: V1 users, V2 password_reset_tokens, V3 error_codes, V4 refresh_tokens, V5–V6 mã lỗi mới, V7 study_sets + cards, V8 quizzes + questions + question_options
 ```
