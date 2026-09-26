@@ -63,7 +63,7 @@ class AuthControllerTest {
     @Test
     void registerIsPublicAndReturnsCreated() throws Exception {
         given(authService.register(any(RegisterRequest.class)))
-                .willReturn(new AuthResponse("token", "Bearer", 3600, ALICE));
+                .willReturn(new AuthResponse("token", "Bearer", 900, "refresh", ALICE));
 
         mockMvc.perform(post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -118,6 +118,58 @@ class AuthControllerTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.errorCode").value("AUTH_INVALID_CREDENTIALS"))
                 .andExpect(jsonPath("$.errorMessage").value("Incorrect email or password"));
+    }
+
+    @Test
+    void refreshIsPublicAndReturnsNewTokens() throws Exception {
+        given(authService.refresh("old-refresh"))
+                .willReturn(new AuthResponse("new-access", "Bearer", 900, "new-refresh", ALICE));
+
+        mockMvc.perform(post("/api/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"refreshToken":"old-refresh"}
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("new-access"))
+                .andExpect(jsonPath("$.refreshToken").value("new-refresh"));
+    }
+
+    @Test
+    void refreshWithInvalidTokenReturnsUnauthorized() throws Exception {
+        given(authService.refresh("bad"))
+                .willThrow(new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_INVALID));
+
+        mockMvc.perform(post("/api/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"refreshToken":"bad"}
+                        """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("AUTH_REFRESH_TOKEN_INVALID"));
+    }
+
+    @Test
+    void refreshRejectsBlankToken() throws Exception {
+        mockMvc.perform(post("/api/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"refreshToken":""}
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("COMMON_VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.errors.refreshToken").exists());
+    }
+
+    @Test
+    void logoutIsPublicAndReturnsNoContent() throws Exception {
+        mockMvc.perform(post("/api/auth/logout")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"refreshToken":"old-refresh"}
+                        """))
+                .andExpect(status().isNoContent());
+        verify(authService).logout("old-refresh");
     }
 
     @Test

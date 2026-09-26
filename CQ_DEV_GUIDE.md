@@ -11,7 +11,7 @@ src/main/java/com/charlie/quizlet/
 │   ├── ApiPaths       # hằng số đường dẫn API + danh sách endpoint công khai
 │   ├── GlobalExceptionHandler   # mọi lỗi -> problem detail có errorCode
 │   └── error/         # ErrorCode (enum), BusinessException, ErrorCatalog (đọc + cache bảng error_codes)
-├── auth/              # đăng ký, đăng nhập, JWT; reset/ = quên / đặt lại mật khẩu
+├── auth/              # đăng ký, đăng nhập, JWT, refresh token; reset/ = quên / đặt lại mật khẩu
 └── user/              # User entity, Role, UserStatus, UserResponse
 src/main/resources/
 ├── application.yml                 # cấu hình (app.* -> AppProperties)
@@ -132,7 +132,8 @@ src/main/resources/db/migration/
   V1__create_users.sql
   V2__create_password_reset_tokens.sql
   V3__create_error_codes.sql
-  V4__...                      ← thay đổi tiếp theo luôn là file mới
+  V4__create_refresh_tokens.sql
+  V5__...                      ← thay đổi tiếp theo luôn là file mới
 ```
 
 - Chạy tự động khi khởi động app (và khi chạy `CharlieQuizletBeApplicationTests`).

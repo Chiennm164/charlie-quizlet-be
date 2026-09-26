@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.charlie.quizlet.auth.dto.AuthResponse;
 import com.charlie.quizlet.auth.dto.ForgotPasswordRequest;
 import com.charlie.quizlet.auth.dto.LoginRequest;
+import com.charlie.quizlet.auth.dto.RefreshTokenRequest;
 import com.charlie.quizlet.auth.dto.RegisterRequest;
 import com.charlie.quizlet.auth.dto.ResetPasswordRequest;
 import com.charlie.quizlet.auth.reset.PasswordResetService;
@@ -56,6 +57,29 @@ public class AuthController {
     @ApiResponse(responseCode = "403", description = "Account is locked or pending", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    @PostMapping(ApiPaths.AUTH_REFRESH)
+    @SecurityRequirements
+    @Operation(summary = "Exchange a refresh token for a new access token and refresh token",
+            description = "The refresh token is single-use: the old one is revoked and a new one is returned.")
+    @ApiResponse(responseCode = "200", description = "New tokens")
+    @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "401", description = "Refresh token is invalid, expired or revoked", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "403", description = "Account is locked or pending", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    public AuthResponse refresh(@Valid @RequestBody RefreshTokenRequest request) {
+        return authService.refresh(request.refreshToken());
+    }
+
+    @PostMapping(ApiPaths.AUTH_LOGOUT)
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @SecurityRequirements
+    @Operation(summary = "Log out by revoking the refresh token of this session",
+            description = "Always returns 204, even if the token is unknown or already revoked.")
+    @ApiResponse(responseCode = "204", description = "Logged out")
+    @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    public void logout(@Valid @RequestBody RefreshTokenRequest request) {
+        authService.logout(request.refreshToken());
     }
 
     @PostMapping(ApiPaths.AUTH_FORGOT_PASSWORD)

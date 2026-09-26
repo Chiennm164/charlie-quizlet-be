@@ -19,9 +19,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.security.crypto.password.PasswordEncoder;
+
+import com.charlie.quizlet.auth.RefreshTokenRepository;
 import com.charlie.quizlet.common.error.BusinessException;
 import com.charlie.quizlet.config.AppProperties;
-
 import com.charlie.quizlet.user.User;
 import com.charlie.quizlet.user.UserRepository;
 import com.charlie.quizlet.user.UserStatus;
@@ -32,6 +33,7 @@ class PasswordResetServiceTest {
 
     private final UserRepository userRepository = mock(UserRepository.class);
     private final PasswordResetTokenRepository tokenRepository = mock(PasswordResetTokenRepository.class);
+    private final RefreshTokenRepository refreshTokenRepository = mock(RefreshTokenRepository.class);
     private final PasswordResetNotifier notifier = mock(PasswordResetNotifier.class);
     private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
 
@@ -43,8 +45,8 @@ class PasswordResetServiceTest {
         AppProperties props = new AppProperties(
                 new AppProperties.Frontend("http://localhost:4200/", "/reset-password"), null,
                 new AppProperties.PasswordReset(Duration.ofMinutes(30)), null);
-        service = new PasswordResetService(userRepository, tokenRepository, notifier, passwordEncoder,
-                Clock.fixed(NOW, ZoneOffset.UTC), props);
+        service = new PasswordResetService(userRepository, tokenRepository, refreshTokenRepository, notifier,
+                passwordEncoder, Clock.fixed(NOW, ZoneOffset.UTC), props);
         alice = new User();
         alice.setId(42L);
         alice.setEmail("alice@example.com");
@@ -83,7 +85,7 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    void resetPasswordUpdatesHashAndInvalidatesTokens() {
+    void resetPasswordUpdatesHashInvalidatesTokensAndLogsOutEverywhere() {
         given(tokenRepository.findByTokenHash(anyString())).willReturn(Optional.of(token(NOW.plusSeconds(60), null)));
         given(passwordEncoder.encode("newsecret123")).willReturn("hashed");
 
@@ -91,6 +93,7 @@ class PasswordResetServiceTest {
 
         assertThat(alice.getPasswordHash()).isEqualTo("hashed");
         verify(tokenRepository).invalidateAllForUser(42L, NOW);
+        verify(refreshTokenRepository).revokeAllForUser(42L, NOW);
     }
 
     @Test
@@ -104,6 +107,7 @@ class PasswordResetServiceTest {
                 .isInstanceOf(BusinessException.class);
 
         verify(passwordEncoder, never()).encode(anyString());
+        verify(refreshTokenRepository, never()).revokeAllForUser(any(), any());
     }
 
     private PasswordResetToken token(Instant expiresAt, Instant usedAt) {

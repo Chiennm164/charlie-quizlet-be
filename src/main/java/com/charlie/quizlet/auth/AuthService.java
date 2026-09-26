@@ -1,6 +1,10 @@
 package com.charlie.quizlet.auth;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Locale;
+import java.util.UUID;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -18,14 +22,25 @@ import com.charlie.quizlet.user.UserResponse;
 import com.charlie.quizlet.user.UserStatus;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
 
+    /**
+     * Refresh token đã bị thay (xoay vòng) mà được gửi lại trong khoảng này thì coi là 2 request làm mới gần như
+     * cùng lúc (vd. 2 tab dùng chung phiên): chỉ từ chối. Gửi lại sau khoảng này: nghi token bị lộ, thu hồi cả phiên.
+     */
+    private static final Duration REFRESH_REUSE_GRACE = Duration.ofSeconds(10);
+
     private final UserRepository userRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final JwtProperties jwtProperties;
+    private final Clock clock;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -38,21 +53,57 @@ public class AuthService {
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setFullName(request.fullName().trim());
-        // Self-registration is always STUDENT; TEACHER/ADMIN are granted by an admin.
+        // Tự đăng ký luôn là STUDENT; TEACHER/ADMIN do admin cấp.
         user.setRole(Role.STUDENT);
         user.setStatus(UserStatus.ACTIVE);
         userRepository.saveAndFlush(user);
 
-        return toAuthResponse(user);
+        return issueTokens(user, UUID.randomUUID());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(normalizeEmail(request.email()))
                 .filter(u -> passwordEncoder.matches(request.password(), u.getPasswordHash()))
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS));
         ensureActive(user);
-        return toAuthResponse(user);
+        return issueTokens(user, UUID.randomUUID());
+    }
+
+    /**
+     * Đổi refresh token lấy cặp token mới. Token cũ bị thu hồi ngay (xoay vòng), nên refresh token bị lộ chỉ dùng
+     * được tới lần làm mới kế tiếp của chủ tài khoản; sau đó ai dùng lại token cũ cũng làm cả phiên bị thu hồi.
+     * <p>
+     * {@code noRollbackFor}: việc thu hồi cả phiên phải được lưu dù ngay sau đó ném lỗi.
+     */
+    @Transactional(noRollbackFor = BusinessException.class)
+    public AuthResponse refresh(String rawRefreshToken) {
+        Instant now = clock.instant();
+        RefreshToken token = refreshTokenRepository.findByTokenHash(OpaqueTokens.hash(rawRefreshToken))
+                .orElseThrow(AuthService::invalidRefreshToken);
+        if (token.getRevokedAt() != null) {
+            if (now.isAfter(token.getRevokedAt().plus(REFRESH_REUSE_GRACE))) {
+                log.warn("Revoked refresh token reused for user {}, revoking the whole session", token.getUser().getId());
+                refreshTokenRepository.revokeFamily(token.getFamilyId(), now);
+            }
+            throw invalidRefreshToken();
+        }
+        if (!now.isBefore(token.getExpiresAt())) {
+            throw invalidRefreshToken();
+        }
+
+        User user = token.getUser();
+        ensureActive(user);
+        token.setRevokedAt(now);
+        return issueTokens(user, token.getFamilyId());
+    }
+
+    /** Thu hồi refresh token của phiên hiện tại. Token không tồn tại / đã thu hồi cũng không báo lỗi: kết quả như nhau. */
+    @Transactional
+    public void logout(String rawRefreshToken) {
+        refreshTokenRepository.findByTokenHash(OpaqueTokens.hash(rawRefreshToken))
+                .filter(token -> token.getRevokedAt() == null)
+                .ifPresent(token -> token.setRevokedAt(clock.instant()));
     }
 
     @Transactional(readOnly = true)
@@ -71,9 +122,22 @@ public class AuthService {
         }
     }
 
-    private AuthResponse toAuthResponse(User user) {
+    /** Cấp access token + refresh token mới; {@code familyId} mới cho lần đăng nhập, giữ nguyên khi làm mới. */
+    private AuthResponse issueTokens(User user, UUID familyId) {
+        String refreshToken = OpaqueTokens.generate();
+        RefreshToken entity = new RefreshToken();
+        entity.setUser(user);
+        entity.setFamilyId(familyId);
+        entity.setTokenHash(OpaqueTokens.hash(refreshToken));
+        entity.setExpiresAt(clock.instant().plus(jwtProperties.refreshExpiration()));
+        refreshTokenRepository.save(entity);
+
         return new AuthResponse(jwtService.issueAccessToken(user), JwtService.TOKEN_TYPE, jwtService.expiresInSeconds(),
-                UserResponse.from(user));
+                refreshToken, UserResponse.from(user));
+    }
+
+    private static BusinessException invalidRefreshToken() {
+        return new BusinessException(ErrorCode.AUTH_REFRESH_TOKEN_INVALID);
     }
 
     private static String normalizeEmail(String email) {

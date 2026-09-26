@@ -25,7 +25,8 @@ class OpenApiDocsTest {
                 .andExpect(jsonPath("$.paths['/api/auth/me'].get").exists())
                 .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
                 // Public endpoints override the global bearer requirement with an empty list.
-                .andExpect(jsonPath("$.paths['/api/auth/login'].post.security").isEmpty());
+                .andExpect(jsonPath("$.paths['/api/auth/login'].post.security").isEmpty())
+                .andExpect(jsonPath("$.paths['/api/auth/refresh'].post.security").isEmpty());
     }
 
     @Test

@@ -37,7 +37,10 @@ app:
     # Giá trị mặc định chỉ dùng cho dev; môi trường khác BẮT BUỘC đặt JWT_SECRET (>= 32 byte).
     secret: ${JWT_SECRET:dev-only-secret-change-me-0123456789abcdef}
     issuer: charlie-quizlet
-    expiration: ${JWT_EXPIRATION:PT24H}
+    # Access token (JWT) để ngắn: hết hạn thì FE dùng refresh token lấy token mới, không phải đăng nhập lại.
+    expiration: ${JWT_EXPIRATION:PT15M}
+    # Refresh token: mỗi lần làm mới được token mới, thời hạn tính lại từ đầu.
+    refresh-expiration: ${JWT_REFRESH_EXPIRATION:P30D}
 
 springdoc:
   # Tắt trên production: SWAGGER_ENABLED=false.
