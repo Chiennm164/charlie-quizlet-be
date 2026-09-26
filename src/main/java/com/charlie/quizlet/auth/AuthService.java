@@ -14,7 +14,6 @@ import com.charlie.quizlet.auth.dto.AuthResponse;
 import com.charlie.quizlet.auth.dto.ChangePasswordRequest;
 import com.charlie.quizlet.auth.dto.LoginRequest;
 import com.charlie.quizlet.auth.dto.RegisterRequest;
-import com.charlie.quizlet.auth.dto.RegisterResponse;
 import com.charlie.quizlet.auth.dto.UpdateProfileRequest;
 import com.charlie.quizlet.common.error.BusinessException;
 import com.charlie.quizlet.common.error.ErrorCode;
@@ -46,7 +45,7 @@ public class AuthService {
     private final Clock clock;
 
     @Transactional
-    public RegisterResponse register(RegisterRequest request) {
+    public AuthResponse register(RegisterRequest request) {
         String email = normalizeEmail(request.email());
         if (userRepository.existsByEmail(email)) {
             throw new BusinessException(ErrorCode.AUTH_EMAIL_ALREADY_REGISTERED);
@@ -56,13 +55,12 @@ public class AuthService {
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setFullName(request.fullName().trim());
-        user.setRole(request.role().toRole());
-        // Teacher tạo được câu hỏi / đề thi nên phải chờ Admin duyệt mới đăng nhập được.
-        user.setStatus(user.getRole() == Role.TEACHER ? UserStatus.PENDING : UserStatus.ACTIVE);
+        // Tự đăng ký luôn là STUDENT; ADMIN tạo lúc khởi động (AdminAccountInitializer).
+        user.setRole(Role.STUDENT);
+        user.setStatus(UserStatus.ACTIVE);
         userRepository.saveAndFlush(user);
 
-        AuthResponse session = user.getStatus() == UserStatus.ACTIVE ? issueTokens(user, UUID.randomUUID()) : null;
-        return new RegisterResponse(UserResponse.from(user), session);
+        return issueTokens(user, UUID.randomUUID());
     }
 
     @Transactional
@@ -148,7 +146,6 @@ public class AuthService {
         switch (user.getStatus()) {
             case ACTIVE -> { }
             case LOCKED -> throw new BusinessException(ErrorCode.AUTH_ACCOUNT_LOCKED);
-            case PENDING -> throw new BusinessException(ErrorCode.AUTH_ACCOUNT_PENDING);
         }
     }
 

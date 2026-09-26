@@ -19,20 +19,21 @@ public enum ErrorCode {
 
     AUTH_INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "Incorrect email or password"),
     AUTH_ACCOUNT_LOCKED(HttpStatus.FORBIDDEN, "Your account is locked"),
-    AUTH_ACCOUNT_PENDING(HttpStatus.FORBIDDEN, "Your account is pending approval"),
     AUTH_USER_NOT_FOUND(HttpStatus.UNAUTHORIZED, "This account no longer exists"),
     AUTH_EMAIL_ALREADY_REGISTERED(HttpStatus.CONFLICT, "This email is already registered"),
     AUTH_RESET_TOKEN_INVALID(HttpStatus.BAD_REQUEST, "The reset link is invalid or has expired"),
     AUTH_REFRESH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "Your session has expired"),
     AUTH_CURRENT_PASSWORD_INCORRECT(HttpStatus.BAD_REQUEST, "Current password is incorrect"),
 
-    ADMIN_USER_NOT_PENDING(HttpStatus.CONFLICT, "This account is not waiting for approval"),
-
     QUIZ_NOT_FOUND(HttpStatus.NOT_FOUND, "Quiz not found"),
     QUIZ_CORRECT_OPTION_REQUIRED(HttpStatus.BAD_REQUEST, "Each question needs exactly one correct answer"),
     QUIZ_DUPLICATE_OPTION(HttpStatus.BAD_REQUEST, "A question has duplicated answers"),
     QUIZ_EMPTY(HttpStatus.BAD_REQUEST, "The quiz has no questions"),
-    QUIZ_ITEM_NOT_FOUND(HttpStatus.BAD_REQUEST, "A question or answer does not belong to this quiz");
+    QUIZ_ITEM_NOT_FOUND(HttpStatus.BAD_REQUEST, "A question or answer does not belong to this quiz"),
+
+    TOPIC_NOT_FOUND(HttpStatus.NOT_FOUND, "Topic not found"),
+    TOPIC_NAME_TAKEN(HttpStatus.CONFLICT, "This topic name already exists"),
+    TOPIC_IN_USE(HttpStatus.CONFLICT, "The topic still has quizzes");
 
     private final HttpStatus defaultStatus;
     private final String defaultMessage;

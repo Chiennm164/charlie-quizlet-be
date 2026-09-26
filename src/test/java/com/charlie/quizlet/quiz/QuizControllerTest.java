@@ -33,6 +33,7 @@ import com.charlie.quizlet.config.JwtConfig;
 import com.charlie.quizlet.config.SecurityConfig;
 import com.charlie.quizlet.quiz.dto.QuizRequest;
 import com.charlie.quizlet.quiz.dto.QuizResponse;
+import com.charlie.quizlet.quiz.dto.TopicQuizzesResponse;
 import com.charlie.quizlet.user.Role;
 import com.charlie.quizlet.user.User;
 
@@ -42,12 +43,12 @@ import com.charlie.quizlet.user.User;
 class QuizControllerTest {
 
     private static final String BODY = """
-            {"title":"Math","timeLimitMinutes":15,"status":"PUBLISHED","questions":[
+            {"topicId":5,"title":"Math","timeLimitMinutes":15,"status":"PUBLISHED","questions":[
               {"content":"2 + 2 = ?","options":[{"content":"3","correct":false},{"content":"4","correct":true}]}]}
             """;
 
-    private static final QuizResponse MATH = new QuizResponse(10L, "Math", null, 15, QuizStatus.PUBLISHED,
-            new QuizResponse.Owner(1L, "Teacher"), 1, List.of(), true, Instant.EPOCH, Instant.EPOCH, Instant.EPOCH);
+    private static final QuizResponse MATH = new QuizResponse(10L, new QuizResponse.TopicRef(5L, "Toán"), "Math",
+            null, 15, QuizStatus.PUBLISHED, new QuizResponse.Owner(1L, "Admin"), 1, List.of(), true, Instant.EPOCH, Instant.EPOCH, Instant.EPOCH);
 
     @Autowired
     private MockMvc mockMvc;
@@ -62,7 +63,7 @@ class QuizControllerTest {
     private ErrorCodeRepository errorCodeRepository;
 
     @Test
-    void studentCannotCreateUpdateDeleteOrListOwnQuizzes() throws Exception {
+    void studentCannotCreateUpdateDeleteOrListAllQuizzes() throws Exception {
         String student = bearer(Role.STUDENT);
         mockMvc.perform(post("/api/quizzes").header("Authorization", student)
                 .contentType(MediaType.APPLICATION_JSON).content(BODY))
@@ -73,16 +74,16 @@ class QuizControllerTest {
                 .andExpect(status().isForbidden());
         mockMvc.perform(delete("/api/quizzes/10").header("Authorization", student))
                 .andExpect(status().isForbidden());
-        mockMvc.perform(get("/api/quizzes/mine").header("Authorization", student))
+        mockMvc.perform(get("/api/admin/quizzes").header("Authorization", student))
                 .andExpect(status().isForbidden());
         verifyNoInteractions(quizService);
     }
 
     @Test
-    void teacherCreatesQuiz() throws Exception {
-        given(quizService.create(eq(new CurrentUser(1L, Role.TEACHER)), any(QuizRequest.class))).willReturn(MATH);
+    void adminCreatesQuiz() throws Exception {
+        given(quizService.create(eq(new CurrentUser(1L, Role.ADMIN)), any(QuizRequest.class))).willReturn(MATH);
 
-        mockMvc.perform(post("/api/quizzes").header("Authorization", bearer(Role.TEACHER))
+        mockMvc.perform(post("/api/quizzes").header("Authorization", bearer(Role.ADMIN))
                 .contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(10))
@@ -91,7 +92,7 @@ class QuizControllerTest {
 
     @Test
     void studentCanListAndViewPublishedQuizzes() throws Exception {
-        given(quizService.listPublished("", QuizSort.RECENT, 0, 12))
+        given(quizService.listPublished(null, "", QuizSort.RECENT, 0, 12))
                 .willReturn(new PageResponse<>(List.of(), 0, 12, 0, 0));
         given(quizService.get(new CurrentUser(1L, Role.STUDENT), 10L)).willReturn(MATH);
 
@@ -104,9 +105,9 @@ class QuizControllerTest {
 
     @Test
     void validatesOptionsCountAndTimeLimit() throws Exception {
-        mockMvc.perform(post("/api/quizzes").header("Authorization", bearer(Role.TEACHER))
+        mockMvc.perform(post("/api/quizzes").header("Authorization", bearer(Role.ADMIN))
                 .contentType(MediaType.APPLICATION_JSON).content("""
-                        {"title":"Math","timeLimitMinutes":0,"status":"DRAFT","questions":[
+                        {"topicId":5,"title":"Math","timeLimitMinutes":0,"status":"DRAFT","questions":[
                           {"content":"Q","options":[{"content":"only","correct":true}]}]}
                         """))
                 .andExpect(status().isBadRequest())
@@ -114,6 +115,26 @@ class QuizControllerTest {
                 .andExpect(jsonPath("$.errors.timeLimitMinutes").exists())
                 .andExpect(jsonPath("$.errors['questions[0].options']").exists());
         verifyNoInteractions(quizService);
+    }
+
+    @Test
+    void byTopicIsOpenToStudentsAndNotMistakenForAnId() throws Exception {
+        given(quizService.listPublishedByTopic(8)).willReturn(List.of(new TopicQuizzesResponse(
+                new QuizResponse.TopicRef(5L, "Toán"), 1, List.of())));
+
+        mockMvc.perform(get("/api/quizzes/by-topic").header("Authorization", bearer(Role.STUDENT)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].topic.name").value("Toán"))
+                .andExpect(jsonPath("$[0].totalQuizzes").value(1));
+    }
+
+    @Test
+    void adminListsAllQuizzesWithFilters() throws Exception {
+        given(quizService.listAll(QuizStatus.DRAFT, 5L, "", QuizSort.RECENT, 0, 12))
+                .willReturn(new PageResponse<>(List.of(), 0, 12, 0, 0));
+
+        mockMvc.perform(get("/api/admin/quizzes?status=DRAFT&topicId=5").header("Authorization", bearer(Role.ADMIN)))
+                .andExpect(status().isOk());
     }
 
     private String bearer(Role role) {

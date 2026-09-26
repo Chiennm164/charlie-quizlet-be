@@ -17,7 +17,6 @@ import com.charlie.quizlet.auth.dto.ForgotPasswordRequest;
 import com.charlie.quizlet.auth.dto.LoginRequest;
 import com.charlie.quizlet.auth.dto.RefreshTokenRequest;
 import com.charlie.quizlet.auth.dto.RegisterRequest;
-import com.charlie.quizlet.auth.dto.RegisterResponse;
 import com.charlie.quizlet.auth.dto.ResetPasswordRequest;
 import com.charlie.quizlet.auth.dto.UpdateProfileRequest;
 import com.charlie.quizlet.auth.reset.PasswordResetService;
@@ -45,13 +44,11 @@ public class AuthController {
     @PostMapping(ApiPaths.AUTH_REGISTER)
     @ResponseStatus(HttpStatus.CREATED)
     @SecurityRequirements
-    @Operation(summary = "Register a STUDENT or TEACHER account",
-            description = "STUDENT accounts are active and logged in at once. TEACHER accounts wait for admin approval: "
-                    + "status is PENDING and session is null.")
+    @Operation(summary = "Register a STUDENT account and log in")
     @ApiResponse(responseCode = "201", description = "Registered")
     @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(responseCode = "409", description = "Email is already registered", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
-    public RegisterResponse register(@Valid @RequestBody RegisterRequest request) {
+    public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
         return authService.register(request);
     }
 
@@ -60,7 +57,7 @@ public class AuthController {
     @Operation(summary = "Log in with email and password and return an access token")
     @ApiResponse(responseCode = "200", description = "Logged in")
     @ApiResponse(responseCode = "401", description = "Invalid email or password", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "403", description = "Account is locked or pending", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "403", description = "Account is locked", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
     }
@@ -72,7 +69,7 @@ public class AuthController {
     @ApiResponse(responseCode = "200", description = "New tokens")
     @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(responseCode = "401", description = "Refresh token is invalid, expired or revoked", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
-    @ApiResponse(responseCode = "403", description = "Account is locked or pending", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "403", description = "Account is locked", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
     public AuthResponse refresh(@Valid @RequestBody RefreshTokenRequest request) {
         return authService.refresh(request.refreshToken());
     }

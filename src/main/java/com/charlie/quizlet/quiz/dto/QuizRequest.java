@@ -19,6 +19,7 @@ import jakarta.validation.constraints.Size;
  * @param status           PUBLISHED cần ít nhất 1 câu hỏi; DRAFT lưu được cả khi chưa có câu nào
  */
 public record QuizRequest(
+        @NotNull Long topicId,
         @NotBlank @Size(max = 255) String title,
         @Size(max = 2000) String description,
         @Min(1) @Max(300) Integer timeLimitMinutes,

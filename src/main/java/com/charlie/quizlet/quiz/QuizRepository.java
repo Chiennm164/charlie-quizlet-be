@@ -1,27 +1,41 @@
 package com.charlie.quizlet.quiz;
 
+import java.util.List;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
 import com.charlie.quizlet.quiz.dto.QuizSummaryResponse;
+import com.charlie.quizlet.topic.Topic;
 
 public interface QuizRepository extends JpaRepository<Quiz, Long> {
 
     String SUMMARY = """
             select new com.charlie.quizlet.quiz.dto.QuizSummaryResponse(q.id, q.title, q.description, q.status,
-                q.timeLimitMinutes, size(q.questions), q.owner.fullName, q.updatedAt, q.publishedAt)
+                q.timeLimitMinutes, size(q.questions), q.topic.id, q.topic.name, q.owner.fullName, q.updatedAt,
+                q.publishedAt)
             from Quiz q
             """;
 
-    /** Bộ đề của 1 người soạn (cả nháp). {@code titlePattern}: xem SearchPatterns. */
-    @Query(value = SUMMARY + "where q.owner.id = :ownerId and lower(q.title) like :titlePattern escape '\\'",
-            countQuery = "select count(q) from Quiz q where q.owner.id = :ownerId and lower(q.title) like :titlePattern escape '\\'")
-    Page<QuizSummaryResponse> findOwnedSummaries(Long ownerId, String titlePattern, Pageable pageable);
+    /** Tham số null = không lọc theo điều kiện đó. {@code titlePattern}: xem SearchPatterns. */
+    String FILTER = """
+            where (:status is null or q.status = :status)
+              and (:topicId is null or q.topic.id = :topicId)
+              and lower(q.title) like :titlePattern escape '\\'
+            """;
 
-    /** Bộ đề đã xuất bản của mọi người soạn. */
-    @Query(value = SUMMARY + "where q.status = :status and lower(q.title) like :titlePattern escape '\\'",
-            countQuery = "select count(q) from Quiz q where q.status = :status and lower(q.title) like :titlePattern escape '\\'")
-    Page<QuizSummaryResponse> findSummariesByStatus(QuizStatus status, String titlePattern, Pageable pageable);
+    @Query(value = SUMMARY + FILTER, countQuery = "select count(q) from Quiz q " + FILTER)
+    Page<QuizSummaryResponse> findSummaries(QuizStatus status, Long topicId, String titlePattern, Pageable pageable);
+
+    long countByTopicId(Long topicId);
+
+    /** Chủ đề có ít nhất 1 bộ đề ở trạng thái {@code status}, theo tên A → Z. */
+    @Query("""
+            select t from Topic t
+            where exists (select 1 from Quiz q where q.topic = t and q.status = :status)
+            order by lower(t.name)
+            """)
+    List<Topic> findTopicsHavingQuizzes(QuizStatus status);
 }

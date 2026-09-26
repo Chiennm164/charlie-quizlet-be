@@ -4,7 +4,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -26,7 +25,6 @@ import com.charlie.quizlet.auth.dto.AuthResponse;
 import com.charlie.quizlet.auth.dto.ChangePasswordRequest;
 import com.charlie.quizlet.auth.dto.LoginRequest;
 import com.charlie.quizlet.auth.dto.RegisterRequest;
-import com.charlie.quizlet.auth.dto.RegisterResponse;
 import com.charlie.quizlet.auth.dto.UpdateProfileRequest;
 import com.charlie.quizlet.auth.reset.PasswordResetService;
 import com.charlie.quizlet.common.GlobalExceptionHandler;
@@ -69,28 +67,16 @@ class AuthControllerTest {
     @Test
     void registerIsPublicAndReturnsCreated() throws Exception {
         given(authService.register(any(RegisterRequest.class)))
-                .willReturn(new RegisterResponse(ALICE, new AuthResponse("token", "Bearer", 900, "refresh", ALICE)));
+                .willReturn(new AuthResponse("token", "Bearer", 900, "refresh", ALICE));
 
         mockMvc.perform(post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                        {"email":"alice@example.com","password":"secret123","fullName":"Alice","role":"STUDENT"}
+                        {"email":"alice@example.com","password":"secret123","fullName":"Alice"}
                         """))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.session.accessToken").value("token"))
+                .andExpect(jsonPath("$.accessToken").value("token"))
                 .andExpect(jsonPath("$.user.email").value("alice@example.com"));
-    }
-
-    @Test
-    void registerCannotChooseAdminRole() throws Exception {
-        mockMvc.perform(post("/api/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                        {"email":"eve@example.com","password":"secret123","fullName":"Eve","role":"ADMIN"}
-                        """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("COMMON_BAD_REQUEST"));
-        verify(authService, never()).register(any());
     }
 
     @Test
@@ -120,8 +106,7 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.errorCode").value("COMMON_VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.errors.email").exists())
                 .andExpect(jsonPath("$.errors.password").exists())
-                .andExpect(jsonPath("$.errors.fullName").exists())
-                .andExpect(jsonPath("$.errors.role").exists());
+                .andExpect(jsonPath("$.errors.fullName").exists());
     }
 
     @Test

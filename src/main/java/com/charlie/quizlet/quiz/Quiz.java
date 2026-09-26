@@ -6,6 +6,7 @@ import java.util.List;
 
 import org.hibernate.annotations.CreationTimestamp;
 
+import com.charlie.quizlet.topic.Topic;
 import com.charlie.quizlet.user.User;
 
 import jakarta.persistence.CascadeType;
@@ -40,6 +41,10 @@ public class Quiz {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "owner_id", nullable = false)
     private User owner;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "topic_id", nullable = false)
+    private Topic topic;
 
     @Column(nullable = false)
     private String title;

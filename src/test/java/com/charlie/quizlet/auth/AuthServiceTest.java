@@ -24,8 +24,6 @@ import com.charlie.quizlet.auth.dto.AuthResponse;
 import com.charlie.quizlet.auth.dto.ChangePasswordRequest;
 import com.charlie.quizlet.auth.dto.LoginRequest;
 import com.charlie.quizlet.auth.dto.RegisterRequest;
-import com.charlie.quizlet.auth.dto.RegisterResponse;
-import com.charlie.quizlet.auth.dto.RegistrationRole;
 import com.charlie.quizlet.auth.dto.UpdateProfileRequest;
 import com.charlie.quizlet.common.error.BusinessException;
 import com.charlie.quizlet.common.error.ErrorCode;
@@ -60,9 +58,7 @@ class AuthServiceTest {
 
     @Test
     void registerCreatesActiveStudentWithNormalizedEmail() {
-        RegisterResponse registered = service.register(
-                new RegisterRequest("  Alice@Example.COM ", "secret123", "  Alice  ", RegistrationRole.STUDENT));
-        AuthResponse res = registered.session();
+        AuthResponse res = service.register(new RegisterRequest("  Alice@Example.COM ", "secret123", "  Alice  "));
 
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
         verify(userRepository).saveAndFlush(saved.capture());
@@ -77,25 +73,10 @@ class AuthServiceTest {
     }
 
     @Test
-    void registerTeacherWaitsForApprovalWithoutSession() {
-        RegisterResponse res = service.register(
-                new RegisterRequest("bob@example.com", "secret123", "Bob", RegistrationRole.TEACHER));
-
-        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).saveAndFlush(saved.capture());
-        assertThat(saved.getValue().getRole()).isEqualTo(Role.TEACHER);
-        assertThat(saved.getValue().getStatus()).isEqualTo(UserStatus.PENDING);
-        assertThat(res.user().status()).isEqualTo(UserStatus.PENDING);
-        assertThat(res.session()).isNull();
-        verify(refreshTokenRepository, never()).save(any());
-    }
-
-    @Test
     void registerRejectsDuplicateEmail() {
         given(userRepository.existsByEmail("alice@example.com")).willReturn(true);
 
-        assertThatThrownBy(() -> service.register(
-                new RegisterRequest("alice@example.com", "secret123", "Alice", RegistrationRole.STUDENT)))
+        assertThatThrownBy(() -> service.register(new RegisterRequest("alice@example.com", "secret123", "Alice")))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.AUTH_EMAIL_ALREADY_REGISTERED);
@@ -113,14 +94,11 @@ class AuthServiceTest {
     }
 
     @Test
-    void loginRejectsLockedOrPendingAccount() {
+    void loginRejectsLockedAccount() {
         given(userRepository.findByEmail("locked@example.com")).willReturn(Optional.of(user(UserStatus.LOCKED)));
-        given(userRepository.findByEmail("pending@example.com")).willReturn(Optional.of(user(UserStatus.PENDING)));
 
         assertErrorCode(() -> service.login(new LoginRequest("locked@example.com", "secret123")),
                 ErrorCode.AUTH_ACCOUNT_LOCKED);
-        assertErrorCode(() -> service.login(new LoginRequest("pending@example.com", "secret123")),
-                ErrorCode.AUTH_ACCOUNT_PENDING);
         verify(refreshTokenRepository, never()).save(any());
     }
 

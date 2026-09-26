@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,21 +25,27 @@ import com.charlie.quizlet.quiz.dto.QuestionRequest;
 import com.charlie.quizlet.quiz.dto.QuizRequest;
 import com.charlie.quizlet.quiz.dto.QuizResponse;
 import com.charlie.quizlet.quiz.dto.QuizSummaryResponse;
+import com.charlie.quizlet.quiz.dto.TopicQuizzesResponse;
+import com.charlie.quizlet.topic.TopicService;
 import com.charlie.quizlet.user.User;
 import com.charlie.quizlet.user.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 
 /**
- * Bộ đề trắc nghiệm. Chỉ TEACHER / ADMIN tạo được (chặn ở SecurityConfig); người soạn sửa / xoá đề của mình,
- * ADMIN sửa / xoá mọi đề. Nháp chỉ người sửa được mới thấy; người khác nhận QUIZ_NOT_FOUND (không lộ là có tồn tại).
+ * Bộ đề trắc nghiệm. Chỉ ADMIN tạo / sửa / xoá (chặn ở SecurityConfig; mọi Admin sửa được mọi đề).
+ * Đề xuất bản = đã duyệt, học sinh thấy được. Nháp chỉ Admin thấy; người khác nhận QUIZ_NOT_FOUND (không lộ là có).
  */
 @Service
 @RequiredArgsConstructor
 public class QuizService {
 
+    /** Số bộ đề tối đa mỗi chủ đề trên Home. */
+    static final int MAX_PER_TOPIC = 20;
+
     private final QuizRepository quizRepository;
     private final UserRepository userRepository;
+    private final TopicService topicService;
     private final Clock clock;
 
     @Transactional
@@ -55,12 +62,12 @@ public class QuizService {
     @Transactional(readOnly = true)
     public QuizResponse get(CurrentUser user, Long id) {
         Quiz quiz = findViewable(user, id);
-        return QuizResponse.from(quiz, canEdit(quiz, user));
+        return QuizResponse.from(quiz, user.isAdmin());
     }
 
     @Transactional
     public QuizResponse update(CurrentUser user, Long id, QuizRequest request) {
-        Quiz quiz = findEditable(user, id);
+        Quiz quiz = findViewable(user, id);
         applyRequest(quiz, request);
         // Flush để câu hỏi / đáp án mới có id trước khi trả về.
         quizRepository.flush();
@@ -69,41 +76,46 @@ public class QuizService {
 
     @Transactional
     public void delete(CurrentUser user, Long id) {
-        quizRepository.delete(findEditable(user, id));
+        quizRepository.delete(findViewable(user, id));
     }
 
-    /** Bộ đề do người gọi soạn, cả nháp. */
+    /** Màn quản lý của Admin: mọi bộ đề, cả nháp. {@code status} / {@code topicId} null = không lọc. */
     @Transactional(readOnly = true)
-    public PageResponse<QuizSummaryResponse> listMine(CurrentUser user, String query, QuizSort sort, int page,
-            int size) {
-        return PageResponse.from(quizRepository.findOwnedSummaries(user.id(), SearchPatterns.contains(query),
+    public PageResponse<QuizSummaryResponse> listAll(QuizStatus status, Long topicId, String query, QuizSort sort,
+            int page, int size) {
+        return PageResponse.from(quizRepository.findSummaries(status, topicId, SearchPatterns.contains(query),
                 PageRequests.of(page, size, sort.sort())));
     }
 
-    /** Bộ đề đã xuất bản của mọi người soạn — ai đăng nhập cũng xem được. */
+    /** Bộ đề đã xuất bản — ai đăng nhập cũng xem được. {@code topicId} null = mọi chủ đề. */
     @Transactional(readOnly = true)
-    public PageResponse<QuizSummaryResponse> listPublished(String query, QuizSort sort, int page, int size) {
-        return PageResponse.from(quizRepository.findSummariesByStatus(QuizStatus.PUBLISHED,
-                SearchPatterns.contains(query), PageRequests.of(page, size, sort.sort())));
+    public PageResponse<QuizSummaryResponse> listPublished(Long topicId, String query, QuizSort sort, int page,
+            int size) {
+        return listAll(QuizStatus.PUBLISHED, topicId, query, sort, page, size);
+    }
+
+    /**
+     * Home: mỗi chủ đề có đề đã xuất bản kèm tối đa {@code limit} đề mới nhất. Mỗi chủ đề 1 query — số chủ đề nhỏ
+     * (Admin tự tạo), đổi lại không phải nạp hết mọi đề để tự nhóm.
+     */
+    @Transactional(readOnly = true)
+    public List<TopicQuizzesResponse> listPublishedByTopic(int limit) {
+        int perTopic = Math.clamp(limit, 1, MAX_PER_TOPIC);
+        return quizRepository.findTopicsHavingQuizzes(QuizStatus.PUBLISHED).stream()
+                .map(topic -> {
+                    Page<QuizSummaryResponse> page = quizRepository.findSummaries(QuizStatus.PUBLISHED,
+                            topic.getId(), SearchPatterns.contains(null),
+                            PageRequests.of(0, perTopic, QuizSort.RECENT.sort()));
+                    return new TopicQuizzesResponse(new QuizResponse.TopicRef(topic.getId(), topic.getName()),
+                            page.getTotalElements(), page.getContent());
+                })
+                .toList();
     }
 
     private Quiz findViewable(CurrentUser user, Long id) {
         return quizRepository.findById(id)
-                .filter(quiz -> quiz.getStatus() == QuizStatus.PUBLISHED || canEdit(quiz, user))
+                .filter(quiz -> quiz.getStatus() == QuizStatus.PUBLISHED || user.isAdmin())
                 .orElseThrow(() -> new BusinessException(ErrorCode.QUIZ_NOT_FOUND));
-    }
-
-    /** Đề đã xuất bản của người khác: xem được nhưng không sửa / xoá được. */
-    private Quiz findEditable(CurrentUser user, Long id) {
-        Quiz quiz = findViewable(user, id);
-        if (!canEdit(quiz, user)) {
-            throw new BusinessException(ErrorCode.COMMON_FORBIDDEN);
-        }
-        return quiz;
-    }
-
-    private static boolean canEdit(Quiz quiz, CurrentUser user) {
-        return user.isAdmin() || quiz.getOwner().getId().equals(user.id());
     }
 
     private void applyRequest(Quiz quiz, QuizRequest request) {
@@ -112,6 +124,7 @@ public class QuizService {
             throw new BusinessException(ErrorCode.QUIZ_EMPTY);
         }
 
+        quiz.setTopic(topicService.find(request.topicId()));
         quiz.setTitle(request.title().trim());
         quiz.setDescription(blankToNull(request.description()));
         quiz.setTimeLimitMinutes(request.timeLimitMinutes());

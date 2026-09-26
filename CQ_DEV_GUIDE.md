@@ -14,6 +14,7 @@ src/main/java/com/charlie/quizlet/
 ├── auth/              # đăng ký, đăng nhập, JWT, refresh token; reset/ = quên / đặt lại mật khẩu
 ├── user/              # User entity, Role, UserStatus, UserResponse
 ├── admin/             # AdminAccountInitializer (tạo Admin lúc khởi động), duyệt tài khoản chờ duyệt
+├── topic/             # chủ đề (Topic)
 └── quiz/              # bộ đề (Quiz) + câu hỏi (Question) + đáp án (QuestionOption)
 src/main/resources/
 ├── application.yml                 # cấu hình (app.* -> AppProperties)
@@ -68,11 +69,11 @@ public class PasswordResetService {
 
 ## 3. Thêm một API
 
-Ví dụ `GET /api/quizzes/mine` (Teacher / Admin) — package `quiz/`, bản đầy đủ: [QuizController](src/main/java/com/charlie/quizlet/quiz/QuizController.java):
+Ví dụ `GET /api/admin/quizzes` (ADMIN) — package `quiz/`, bản đầy đủ: [QuizController](src/main/java/com/charlie/quizlet/quiz/QuizController.java):
 
 ```java
 // common/ApiPaths.java
-public static final String QUIZZES_MINE = QUIZZES + "/mine";
+public static final String ADMIN_QUIZZES = ADMIN + "/quizzes";   // /api/admin/** tự yêu cầu ADMIN (SecurityConfig)
 
 // quiz/dto/QuizSummaryResponse.java
 public record QuizSummaryResponse(Long id, String title, QuizStatus status, long questionCount, ...) { }
@@ -85,14 +86,14 @@ public class QuizController {
 
     private final QuizService quizService;
 
-    @GetMapping(ApiPaths.QUIZZES_MINE)
-    @Operation(summary = "List quizzes authored by the current user, drafts included (TEACHER / ADMIN)")
+    @GetMapping(ApiPaths.ADMIN_QUIZZES)
+    @Operation(summary = "List all quizzes, drafts included (ADMIN)")
     @ApiResponse(responseCode = "200", description = "One page of quizzes")
-    @ApiResponse(responseCode = "403", description = "Not a teacher or admin", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
-    public PageResponse<QuizSummaryResponse> listMine(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
-            @RequestParam(defaultValue = "") String q, @RequestParam(defaultValue = "RECENT") QuizSort sort,
+    @ApiResponse(responseCode = "403", description = "Not an admin", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    public PageResponse<QuizSummaryResponse> listAll(@RequestParam(required = false) QuizStatus status,
+            @RequestParam(required = false) Long topicId, @RequestParam(defaultValue = "") String q, @RequestParam(defaultValue = "RECENT") QuizSort sort,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "12") int size) {
-        return quizService.listMine(CurrentUser.from(jwt), q, sort, page, size);
+        return quizService.listAll(status, topicId, q, sort, page, size);
     }
 }
 ```
@@ -100,7 +101,7 @@ public class QuizController {
 - Cần id + role người gọi (vd. Admin được sửa mọi thứ): `CurrentUser.from(jwt)` (`auth/CurrentUser`) — lấy từ token, không đọc lại DB.
 - Danh sách có phân trang: `PageRequests.of(page, size, sort)` + trả `PageResponse.from(page)` (`common/dto`); tìm "chứa chuỗi" dùng `SearchPatterns.contains(q)`, không trả thẳng `Page` của Spring Data. Cho sort bằng enum (vd. `QuizSort`), không nhận tên cột từ client.
 - Endpoint công khai: thêm path vào `ApiPaths.PUBLIC_GET` / `PUBLIC_POST` và thêm `@SecurityRequirements` (rỗng) vào method.
-- Phân quyền theo role: claim `role` đã map thành `ROLE_*` → dùng `.requestMatchers(...).hasRole("TEACHER")` trong `SecurityConfig` (vd. `ApiPaths.ADMIN_ALL` → `hasRole("ADMIN")`). Muốn dùng `@PreAuthorize("hasRole('ADMIN')")` trên method thì bật `@EnableMethodSecurity` (hiện chưa bật).
+- Phân quyền theo role: claim `role` đã map thành `ROLE_*` → dùng `.requestMatchers(...).hasRole("ADMIN")` trong `SecurityConfig` (vd. `ApiPaths.ADMIN_ALL` → `hasRole("ADMIN")`). Muốn dùng `@PreAuthorize("hasRole('ADMIN')")` trên method thì bật `@EnableMethodSecurity` (hiện chưa bật).
 - Xong API: kiểm tra trên Swagger UI (`/swagger-ui.html`), cập nhật bảng API trong README, báo FE thêm `API_ENDPOINTS` + model.
 
 ## 4. Lỗi
@@ -142,7 +143,8 @@ src/main/resources/db/migration/
   V7__create_study_sets.sql
   V8__create_quizzes.sql
   V9__drop_study_sets.sql
-  V10__...                     ← thay đổi tiếp theo luôn là file mới
+  V10__drop_teacher_role_add_topics.sql
+  V11__...                     ← thay đổi tiếp theo luôn là file mới
 ```
 
 - Chạy tự động khi khởi động app (và khi chạy `CharlieQuizletBeApplicationTests`).

@@ -3,6 +3,7 @@ package com.charlie.quizlet.quiz;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -14,8 +15,12 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import com.charlie.quizlet.auth.CurrentUser;
 import com.charlie.quizlet.common.error.BusinessException;
@@ -24,6 +29,10 @@ import com.charlie.quizlet.quiz.dto.OptionRequest;
 import com.charlie.quizlet.quiz.dto.QuestionRequest;
 import com.charlie.quizlet.quiz.dto.QuizRequest;
 import com.charlie.quizlet.quiz.dto.QuizResponse;
+import com.charlie.quizlet.quiz.dto.QuizSummaryResponse;
+import com.charlie.quizlet.quiz.dto.TopicQuizzesResponse;
+import com.charlie.quizlet.topic.Topic;
+import com.charlie.quizlet.topic.TopicService;
 import com.charlie.quizlet.user.Role;
 import com.charlie.quizlet.user.User;
 import com.charlie.quizlet.user.UserRepository;
@@ -31,15 +40,21 @@ import com.charlie.quizlet.user.UserRepository;
 class QuizServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-01-01T00:00:00Z");
-    private static final CurrentUser AUTHOR = new CurrentUser(1L, Role.TEACHER);
-    private static final CurrentUser OTHER_TEACHER = new CurrentUser(2L, Role.TEACHER);
+    private static final CurrentUser AUTHOR = new CurrentUser(1L, Role.ADMIN);
+    private static final CurrentUser OTHER_ADMIN = new CurrentUser(9L, Role.ADMIN);
     private static final CurrentUser STUDENT = new CurrentUser(3L, Role.STUDENT);
-    private static final CurrentUser ADMIN = new CurrentUser(9L, Role.ADMIN);
 
     private final QuizRepository quizRepository = mock(QuizRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
-    private final QuizService service = new QuizService(quizRepository, userRepository,
+    private final TopicService topicService = mock(TopicService.class);
+    private final QuizService service = new QuizService(quizRepository, userRepository, topicService,
             Clock.fixed(NOW, ZoneOffset.UTC));
+
+    @BeforeEach
+    void setUp() {
+        given(topicService.find(5L)).willReturn(topic(5L, "Toán"));
+        given(topicService.find(99L)).willThrow(new BusinessException(ErrorCode.TOPIC_NOT_FOUND));
+    }
 
     @Test
     void createPublishedQuizKeepsOrderAndTrims() {
@@ -95,36 +110,64 @@ class QuizServiceTest {
     }
 
     @Test
-    void draftIsHiddenFromOthersButVisibleToAdmin() {
+    void draftIsHiddenFromStudentsButVisibleToEveryAdmin() {
         stored(QuizStatus.DRAFT);
 
         assertErrorCode(() -> service.get(STUDENT, 10L), ErrorCode.QUIZ_NOT_FOUND);
-        assertErrorCode(() -> service.get(OTHER_TEACHER, 10L), ErrorCode.QUIZ_NOT_FOUND);
-        assertThat(service.get(ADMIN, 10L).canEdit()).isTrue();
+        assertThat(service.get(OTHER_ADMIN, 10L).canEdit()).isTrue();
     }
 
     @Test
-    void publishedQuizHidesAnswersFromNonEditors() {
+    void publishedQuizHidesAnswersFromStudents() {
         stored(QuizStatus.PUBLISHED);
 
         QuizResponse res = service.get(STUDENT, 10L);
         assertThat(res.canEdit()).isFalse();
         assertThat(res.questions()).isNull();
         assertThat(res.questionCount()).isEqualTo(1);
+        assertThat(res.topic().name()).isEqualTo("Toán");
 
         assertThat(service.get(AUTHOR, 10L).questions().get(0).options()).extracting(o -> o.correct())
                 .containsExactly(false, true);
     }
 
     @Test
-    void otherTeacherCannotEditOrDeletePublishedQuiz() {
-        stored(QuizStatus.PUBLISHED);
+    void anyAdminEditsAndDeletesAnyQuiz() {
+        Quiz quiz = stored(QuizStatus.PUBLISHED);
 
-        assertErrorCode(() -> service.update(OTHER_TEACHER, 10L, request(QuizStatus.PUBLISHED,
-                question(null, "Q", option(null, "a", true), option(null, "b", false)))),
-                ErrorCode.COMMON_FORBIDDEN);
-        assertErrorCode(() -> service.delete(OTHER_TEACHER, 10L), ErrorCode.COMMON_FORBIDDEN);
-        verify(quizRepository, never()).delete(any());
+        service.update(OTHER_ADMIN, 10L, request(QuizStatus.PUBLISHED,
+                question(null, "Q", option(null, "a", true), option(null, "b", false))));
+        service.delete(OTHER_ADMIN, 10L);
+
+        verify(quizRepository).delete(quiz);
+    }
+
+    @Test
+    void unknownTopicIsRejected() {
+        given(userRepository.findById(1L)).willReturn(Optional.of(user(1L)));
+
+        assertErrorCode(() -> service.create(AUTHOR, new QuizRequest(99L, "Math", null, null, QuizStatus.DRAFT,
+                List.of())), ErrorCode.TOPIC_NOT_FOUND);
+        verify(quizRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void byTopicListsLatestPublishedQuizzesPerTopic() {
+        given(quizRepository.findTopicsHavingQuizzes(QuizStatus.PUBLISHED))
+                .willReturn(List.of(topic(5L, "Toán"), topic(6L, "Văn")));
+        given(quizRepository.findSummaries(eq(QuizStatus.PUBLISHED), eq(5L), eq("%%"), any()))
+                .willReturn(new PageImpl<>(List.of(summary(1L)), PageRequest.of(0, 1), 9));
+        given(quizRepository.findSummaries(eq(QuizStatus.PUBLISHED), eq(6L), eq("%%"), any()))
+                .willReturn(new PageImpl<>(List.of(summary(2L)), PageRequest.of(0, 1), 1));
+
+        List<TopicQuizzesResponse> res = service.listPublishedByTopic(999);
+
+        assertThat(res).extracting(t -> t.topic().name()).containsExactly("Toán", "Văn");
+        assertThat(res.get(0).totalQuizzes()).isEqualTo(9);
+        assertThat(res.get(0).quizzes()).extracting(QuizSummaryResponse::id).containsExactly(1L);
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(quizRepository).findSummaries(eq(QuizStatus.PUBLISHED), eq(5L), eq("%%"), pageable.capture());
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(QuizService.MAX_PER_TOPIC);
     }
 
     @Test
@@ -170,20 +213,12 @@ class QuizServiceTest {
         assertThat(quiz.getQuestions()).isEmpty();
     }
 
-    @Test
-    void adminDeletesAnyQuiz() {
-        Quiz quiz = stored(QuizStatus.DRAFT);
-
-        service.delete(ADMIN, 10L);
-
-        verify(quizRepository).delete(quiz);
-    }
-
     /** Bộ đề id 10 của AUTHOR, 1 câu (id 100) với 2 đáp án: 101 "3" (sai), 102 "4" (đúng). */
     private Quiz stored(QuizStatus status) {
         Quiz quiz = new Quiz();
         quiz.setId(10L);
         quiz.setOwner(user(1L));
+        quiz.setTopic(topic(5L, "Toán"));
         quiz.setTitle("Math");
         quiz.setStatus(status);
         quiz.setPublishedAt(status == QuizStatus.PUBLISHED ? Instant.parse("2025-12-01T00:00:00Z") : null);
@@ -210,7 +245,7 @@ class QuizServiceTest {
     }
 
     private static QuizRequest request(QuizStatus status, QuestionRequest... questions) {
-        return new QuizRequest("Math", null, 15, status, List.of(questions));
+        return new QuizRequest(5L, "Math", null, 15, status, List.of(questions));
     }
 
     private static QuestionRequest question(Long id, String content, OptionRequest... options) {
@@ -219,6 +254,18 @@ class QuizServiceTest {
 
     private static OptionRequest option(Long id, String content, boolean correct) {
         return new OptionRequest(id, content, correct);
+    }
+
+    private static Topic topic(Long id, String name) {
+        Topic topic = new Topic();
+        topic.setId(id);
+        topic.setName(name);
+        return topic;
+    }
+
+    private static QuizSummaryResponse summary(Long id) {
+        return new QuizSummaryResponse(id, "Quiz " + id, null, QuizStatus.PUBLISHED, null, 1, 5L, "Toán", "Admin",
+                NOW, NOW);
     }
 
     private static User user(Long id) {

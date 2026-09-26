@@ -45,7 +45,7 @@ Cấu hình qua biến môi trường (mặc định trong `application.yml`, đ
 
 | Method | Path | Auth | Mô tả |
 |---|---|---|---|
-| POST | `/api/auth/register` | — | `{email, password, fullName, role}` (`role`: `STUDENT` \| `TEACHER`) → 201 + `{user, session}`. Teacher có `status: PENDING`, `session: null` — chờ Admin duyệt mới đăng nhập được |
+| POST | `/api/auth/register` | — | `{email, password, fullName}` → 201 + token. Luôn tạo tài khoản `STUDENT` (gửi kèm `role` cũng bị bỏ qua) |
 | POST | `/api/auth/login` | — | `{email, password}` → token |
 | POST | `/api/auth/refresh` | — | `{refreshToken}` → cặp token mới. Refresh token dùng 1 lần (token cũ bị thu hồi) |
 | POST | `/api/auth/logout` | — | `{refreshToken}` → 204. Thu hồi refresh token của phiên; token sai / đã thu hồi cũng 204 |
@@ -55,37 +55,45 @@ Cấu hình qua biến môi trường (mặc định trong `application.yml`, đ
 | PATCH | `/api/auth/me` | Bearer | `{fullName}` → user sau khi sửa |
 | POST | `/api/auth/change-password` | Bearer | `{currentPassword, newPassword}` → token mới. Đăng xuất mọi thiết bị khác; sai mật khẩu hiện tại → 400 `AUTH_CURRENT_PASSWORD_INCORRECT` |
 
-"Token" trả về từ login / refresh / change-password (và `session` của register): `{accessToken, tokenType, expiresIn, refreshToken, user}` (`expiresIn` tính bằng giây).
+"Token" trả về từ register / login / refresh / change-password: `{accessToken, tokenType, expiresIn, refreshToken, user}` (`expiresIn` tính bằng giây).
 Các API khác gửi header `Authorization: Bearer <accessToken>`.
 
-## Quiz API (bộ đề trắc nghiệm)
+## Role
 
-Cần đăng nhập. **Tạo / sửa / xoá / "của tôi" chỉ `TEACHER`, `ADMIN`** (role khác → 403 `COMMON_FORBIDDEN`).
-Người soạn sửa / xoá đề của mình, `ADMIN` sửa / xoá mọi đề. Đề `DRAFT` chỉ người sửa được mới thấy (người khác 404 `QUIZ_NOT_FOUND`).
+Chỉ 2 role: `STUDENT` (tự đăng ký, làm bài) và `ADMIN` (tạo lúc khởi động từ `ADMIN_EMAIL` / `ADMIN_PASSWORD`; soạn bộ đề,
+quản lý chủ đề). Không có tài khoản chờ duyệt. Mọi thứ dưới `/api/admin/**` chỉ `ADMIN` (role khác → 403 `COMMON_FORBIDDEN`).
+
+## Topic API (chủ đề)
+
+Danh sách phẳng, tên không trùng (không phân biệt hoa thường). Mỗi bộ đề thuộc đúng 1 chủ đề.
 
 | Method | Path | Mô tả |
 |---|---|---|
-| GET | `/api/quizzes?q=&sort=&page=&size=` | Đề đã xuất bản (mọi người). `sort`: `RECENT` \| `NEWEST` \| `TITLE` |
-| GET | `/api/quizzes/mine?q=&sort=&page=&size=` | Đề của tôi, cả nháp (TEACHER / ADMIN) |
-| POST | `/api/quizzes` | `{title, description?, timeLimitMinutes?, status, questions: [{content, explanation?, options: [{content, correct}]}]}` → 201 |
-| GET | `/api/quizzes/{id}` | Bộ đề. `questions` (kèm đáp án đúng) **chỉ có khi `canEdit`**; người làm bài nhận `questions: null` |
+| GET | `/api/topics` | Mọi chủ đề A → Z, kèm `quizCount` (ai đăng nhập cũng xem được) |
+| POST | `/api/admin/topics` | `{name}` → 201. Trùng tên → 409 `TOPIC_NAME_TAKEN` |
+| PUT | `/api/admin/topics/{id}` | Đổi tên |
+| DELETE | `/api/admin/topics/{id}` | 204. Chủ đề còn bộ đề → 409 `TOPIC_IN_USE` |
+
+## Quiz API (bộ đề trắc nghiệm)
+
+**Tạo / sửa / xoá chỉ `ADMIN`** (mọi Admin sửa được mọi đề). `PUBLISHED` = đã duyệt, học sinh thấy; `DRAFT` chỉ Admin thấy
+(người khác 404 `QUIZ_NOT_FOUND`).
+
+| Method | Path | Mô tả |
+|---|---|---|
+| GET | `/api/quizzes/by-topic?limit=8` | **Home**: chủ đề có đề đã xuất bản (A → Z), mỗi chủ đề `{topic, totalQuizzes, quizzes}` — tối đa `limit` (1–20) đề mới nhất |
+| GET | `/api/quizzes?topicId=&q=&sort=&page=&size=` | Đề đã xuất bản, lọc theo chủ đề. `sort`: `RECENT` \| `NEWEST` \| `TITLE` |
+| GET | `/api/admin/quizzes?status=&topicId=&q=&sort=&page=&size=` | Mọi đề, cả nháp (ADMIN) |
+| POST | `/api/quizzes` | `{topicId, title, description?, timeLimitMinutes?, status, questions: [{content, explanation?, options: [{content, correct}]}]}` → 201 |
+| GET | `/api/quizzes/{id}` | Bộ đề (kèm `topic`). `questions` (kèm đáp án đúng) **chỉ có khi `canEdit`** (Admin); học sinh nhận `questions: null` |
 | PUT | `/api/quizzes/{id}` | Gửi toàn bộ câu hỏi theo thứ tự mới; câu / đáp án có `id` được giữ, không có `id` là mới, cũ không gửi bị xoá |
 | DELETE | `/api/quizzes/{id}` | 204, xoá cả câu hỏi |
 
+- `topicId` không tồn tại → 404 `TOPIC_NOT_FOUND`.
 - `status`: `DRAFT` (lưu được cả khi chưa có câu) \| `PUBLISHED` (cần ≥ 1 câu, không thì 400 `QUIZ_EMPTY`). `publishedAt` giữ lần xuất bản đầu, về nháp thì xoá.
 - `timeLimitMinutes`: 1–300, bỏ trống = không giới hạn. Tối đa 200 câu; mỗi câu 2–6 đáp án.
 - Mỗi câu **đúng 1** đáp án `correct` (400 `QUIZ_CORRECT_OPTION_REQUIRED`); đáp án trùng trong 1 câu → 400 `QUIZ_DUPLICATE_OPTION`.
 - `id` câu / đáp án không thuộc đề (hoặc gửi 2 lần) → 400 `QUIZ_ITEM_NOT_FOUND`.
-
-## Admin API
-
-Chỉ role `ADMIN` (`/api/admin/**`, role khác → 403 `COMMON_FORBIDDEN`).
-
-| Method | Path | Mô tả |
-|---|---|---|
-| GET | `/api/admin/users/pending` | Danh sách tài khoản chờ duyệt, cũ nhất trước |
-| POST | `/api/admin/users/{id}/approve` | Duyệt → `status: ACTIVE`, trả user. Không ở trạng thái chờ → 409 `ADMIN_USER_NOT_PENDING` |
-| POST | `/api/admin/users/{id}/reject` | Từ chối → 204, **xoá** tài khoản (email đăng ký lại được) |
 
 **Refresh token:**
 
@@ -137,8 +145,8 @@ thêm vào `ERROR_CODES` ở `src/app/core/config/error-codes.ts` của repo FE.
 | Nhóm | Mã |
 |---|---|
 | Chung | `COMMON_BAD_REQUEST`, `COMMON_VALIDATION_FAILED`, `COMMON_UNAUTHORIZED`, `COMMON_FORBIDDEN`, `COMMON_NOT_FOUND`, `COMMON_CONFLICT`, `COMMON_INTERNAL_ERROR` |
-| Auth | `AUTH_INVALID_CREDENTIALS`, `AUTH_ACCOUNT_LOCKED`, `AUTH_ACCOUNT_PENDING`, `AUTH_USER_NOT_FOUND`, `AUTH_EMAIL_ALREADY_REGISTERED`, `AUTH_RESET_TOKEN_INVALID`, `AUTH_REFRESH_TOKEN_INVALID`, `AUTH_CURRENT_PASSWORD_INCORRECT` |
-| Admin | `ADMIN_USER_NOT_PENDING` |
+| Auth | `AUTH_INVALID_CREDENTIALS`, `AUTH_ACCOUNT_LOCKED`, `AUTH_USER_NOT_FOUND`, `AUTH_EMAIL_ALREADY_REGISTERED`, `AUTH_RESET_TOKEN_INVALID`, `AUTH_REFRESH_TOKEN_INVALID`, `AUTH_CURRENT_PASSWORD_INCORRECT` |
+| Chủ đề | `TOPIC_NOT_FOUND`, `TOPIC_NAME_TAKEN`, `TOPIC_IN_USE` |
 | Bộ đề | `QUIZ_NOT_FOUND`, `QUIZ_CORRECT_OPTION_REQUIRED`, `QUIZ_DUPLICATE_OPTION`, `QUIZ_EMPTY`, `QUIZ_ITEM_NOT_FOUND` |
 
 ## Cấu trúc
@@ -151,11 +159,12 @@ src/main/java/com/charlie/quizlet/
 ├── auth/          # đăng ký, đăng nhập, JWT, refresh token (làm mới / đăng xuất)
 │   └── reset/     # quên / đặt lại mật khẩu
 ├── user/
-├── admin/         # tạo Admin lúc khởi động, duyệt / từ chối tài khoản chờ duyệt
-├── quiz/          # bộ đề trắc nghiệm: câu hỏi + đáp án (TEACHER / ADMIN soạn)
+├── admin/         # tạo Admin lúc khởi động
+├── topic/         # chủ đề của bộ đề (ADMIN quản lý)
+├── quiz/          # bộ đề trắc nghiệm: câu hỏi + đáp án (ADMIN soạn)
 └── <feature>/     # question, exam, flashcard...
 src/main/resources/
 ├── application.yml
 ├── ValidationMessages_vi.properties   # câu lỗi validate tiếng Việt
-└── db/migration/                      # Flyway: V1 users, V2 password_reset_tokens, V3 error_codes, V4 refresh_tokens, V5–V6 mã lỗi mới, V7 study_sets + cards (đã xoá ở V9), V8 quizzes + questions + question_options
+└── db/migration/                      # Flyway: V1 users, V2 password_reset_tokens, V3 error_codes, V4 refresh_tokens, V5–V6 mã lỗi mới, V7 study_sets + cards (đã xoá ở V9), V8 quizzes + questions + question_options, V10 bỏ role TEACHER + topics
 ```

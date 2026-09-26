@@ -19,17 +19,22 @@ public final class ApiPaths {
     public static final String AUTH_LOGOUT = AUTH + "/logout";
     public static final String AUTH_CHANGE_PASSWORD = AUTH + "/change-password";
 
-    /** Bộ đề: xem / làm thì ai đăng nhập cũng được; tạo / sửa / xoá / "của tôi" chỉ TEACHER, ADMIN (SecurityConfig). */
+    /** Chủ đề: ai đăng nhập cũng xem được; tạo / sửa / xoá qua {@link #ADMIN_TOPICS}. */
+    public static final String TOPICS = API + "/topics";
+
+    /** Bộ đề: xem / làm thì ai đăng nhập cũng được; tạo / sửa / xoá chỉ ADMIN (SecurityConfig). */
     public static final String QUIZZES = API + "/quizzes";
     public static final String QUIZ = QUIZZES + "/{id}";
-    public static final String QUIZZES_MINE = QUIZZES + "/mine";
+    /** Home: bộ đề đã xuất bản nhóm theo chủ đề. */
+    public static final String QUIZZES_BY_TOPIC = QUIZZES + "/by-topic";
 
     /** Mọi đường dẫn dưới /api/admin chỉ ADMIN gọi được (SecurityConfig). */
     public static final String ADMIN = API + "/admin";
     public static final String ADMIN_ALL = ADMIN + "/**";
-    public static final String ADMIN_USERS_PENDING = ADMIN + "/users/pending";
-    public static final String ADMIN_USER_APPROVE = ADMIN + "/users/{id}/approve";
-    public static final String ADMIN_USER_REJECT = ADMIN + "/users/{id}/reject";
+    /** Mọi bộ đề, cả nháp — màn quản lý của Admin. */
+    public static final String ADMIN_QUIZZES = ADMIN + "/quizzes";
+    public static final String ADMIN_TOPICS = ADMIN + "/topics";
+    public static final String ADMIN_TOPIC = ADMIN_TOPICS + "/{id}";
 
     /**
      * POST không cần đăng nhập. Làm mới phiên / đăng xuất dùng refresh token trong body thay cho Bearer token,
