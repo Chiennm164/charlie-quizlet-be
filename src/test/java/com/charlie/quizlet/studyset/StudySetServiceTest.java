@@ -3,6 +3,7 @@ package com.charlie.quizlet.studyset;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -16,13 +17,17 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
+import com.charlie.quizlet.common.dto.PageResponse;
 import com.charlie.quizlet.common.error.BusinessException;
 import com.charlie.quizlet.common.error.ErrorCode;
 import com.charlie.quizlet.studyset.dto.CardRequest;
 import com.charlie.quizlet.studyset.dto.CardResponse;
 import com.charlie.quizlet.studyset.dto.StudySetRequest;
 import com.charlie.quizlet.studyset.dto.StudySetResponse;
+import com.charlie.quizlet.studyset.dto.StudySetSummaryResponse;
 import com.charlie.quizlet.user.User;
 import com.charlie.quizlet.user.UserRepository;
 
@@ -114,6 +119,28 @@ class StudySetServiceTest {
         assertErrorCode(() -> service.update(OWNER_ID, 10L, request("x", null,
                 new CardRequest(101L, "a", "b"), new CardRequest(101L, "c", "d"))),
                 ErrorCode.STUDY_SET_CARD_NOT_FOUND);
+    }
+
+    @Test
+    void listMineClampsPagingAndBuildsEscapedPattern() {
+        given(studySetRepository.findSummaries(eq(OWNER_ID), any(), any()))
+                .willAnswer(inv -> new PageImpl<>(List.of(), inv.getArgument(2, Pageable.class), 0));
+
+        PageResponse<StudySetSummaryResponse> res = service.listMine(OWNER_ID, "  50%_Off ", StudySetSort.TITLE, -3,
+                999);
+
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(studySetRepository).findSummaries(eq(OWNER_ID), eq("%50\\%\\_off%"), pageable.capture());
+        assertThat(pageable.getValue().getPageNumber()).isZero();
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(StudySetService.MAX_PAGE_SIZE);
+        assertThat(pageable.getValue().getSort()).isEqualTo(StudySetSort.TITLE.sort());
+        assertThat(res.totalElements()).isZero();
+    }
+
+    @Test
+    void containsPatternEscapesBackslash() {
+        assertThat(StudySetService.containsPattern(null)).isEqualTo("%%");
+        assertThat(StudySetService.containsPattern("a\\b")).isEqualTo("%a\\\\b%");
     }
 
     @Test

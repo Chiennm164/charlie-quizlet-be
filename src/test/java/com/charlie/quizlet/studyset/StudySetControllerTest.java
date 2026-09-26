@@ -24,6 +24,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.charlie.quizlet.auth.JwtService;
 import com.charlie.quizlet.common.GlobalExceptionHandler;
+import com.charlie.quizlet.common.dto.PageResponse;
 import com.charlie.quizlet.common.error.BusinessException;
 import com.charlie.quizlet.common.error.ErrorCatalog;
 import com.charlie.quizlet.common.error.ErrorCode;
@@ -34,6 +35,7 @@ import com.charlie.quizlet.config.SecurityConfig;
 import com.charlie.quizlet.studyset.dto.CardResponse;
 import com.charlie.quizlet.studyset.dto.StudySetRequest;
 import com.charlie.quizlet.studyset.dto.StudySetResponse;
+import com.charlie.quizlet.studyset.dto.StudySetSummaryResponse;
 import com.charlie.quizlet.user.Role;
 import com.charlie.quizlet.user.User;
 
@@ -105,6 +107,25 @@ class StudySetControllerTest {
         mockMvc.perform(get("/api/study-sets/99").header("Authorization", bearer()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("STUDY_SET_NOT_FOUND"));
+    }
+
+    @Test
+    void listMineUsesDefaultsAndIsNotMistakenForAnId() throws Exception {
+        given(studySetService.listMine(1L, "", StudySetSort.RECENT, 0, 12)).willReturn(new PageResponse<>(
+                List.of(new StudySetSummaryResponse(10L, "Animals", null, StudySetVisibility.PRIVATE, 2,
+                        Instant.parse("2026-01-01T00:00:00Z"))), 0, 12, 1, 1));
+
+        mockMvc.perform(get("/api/study-sets/mine").header("Authorization", bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].cardCount").value(2))
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    void listMineRejectsUnknownSort() throws Exception {
+        mockMvc.perform(get("/api/study-sets/mine?sort=password").header("Authorization", bearer()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("COMMON_BAD_REQUEST"));
     }
 
     @Test

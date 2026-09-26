@@ -65,6 +65,7 @@ Cần đăng nhập. Học phần `PRIVATE` chỉ chủ xem được (người k
 
 | Method | Path | Mô tả |
 |---|---|---|
+| GET | `/api/study-sets/mine?q=&sort=&page=&size=` | Học phần của tôi (không kèm thẻ, có `cardCount`). `q`: tiêu đề chứa (không phân biệt hoa thường); `sort`: `RECENT` (mặc định, mới sửa trước) \| `NEWEST` \| `TITLE`; `page` từ 0; `size` 1–50 (mặc định 12). Trả `{content, page, size, totalElements, totalPages}` |
 | POST | `/api/study-sets` | `{title, description?, visibility, cards: [{term, definition}]}` → 201 + học phần |
 | GET | `/api/study-sets/{id}` | Học phần kèm thẻ theo thứ tự |
 | PUT | `/api/study-sets/{id}` | Gửi **toàn bộ** thẻ theo thứ tự mới: thẻ có `id` được giữ và cập nhật, thẻ không có `id` được thêm, thẻ cũ không có trong danh sách bị xoá |

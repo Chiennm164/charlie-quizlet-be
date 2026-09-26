@@ -97,6 +97,7 @@ public class StudySetController {
 }
 ```
 
+- Danh sách có phân trang: trả `PageResponse.from(page)` (`common/dto`), không trả thẳng `Page` của Spring Data. Cho sort bằng enum (vd. `StudySetSort`), không nhận tên cột từ client.
 - Endpoint công khai: thêm path vào `ApiPaths.PUBLIC_GET` / `PUBLIC_POST` và thêm `@SecurityRequirements` (rỗng) vào method.
 - Phân quyền theo role: claim `role` đã map thành `ROLE_*` → dùng `.requestMatchers(...).hasRole("TEACHER")` trong `SecurityConfig` (vd. `ApiPaths.ADMIN_ALL` → `hasRole("ADMIN")`). Muốn dùng `@PreAuthorize("hasRole('ADMIN')")` trên method thì bật `@EnableMethodSecurity` (hiện chưa bật).
 - Xong API: kiểm tra trên Swagger UI (`/swagger-ui.html`), cập nhật bảng API trong README, báo FE thêm `API_ENDPOINTS` + model.

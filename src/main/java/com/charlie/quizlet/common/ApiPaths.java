@@ -21,6 +21,7 @@ public final class ApiPaths {
 
     public static final String STUDY_SETS = API + "/study-sets";
     public static final String STUDY_SET = STUDY_SETS + "/{id}";
+    public static final String STUDY_SETS_MINE = STUDY_SETS + "/mine";
 
     /** Mọi đường dẫn dưới /api/admin chỉ ADMIN gọi được (SecurityConfig). */
     public static final String ADMIN = API + "/admin";
