@@ -15,6 +15,7 @@ import com.charlie.quizlet.auth.dto.ForgotPasswordRequest;
 import com.charlie.quizlet.auth.dto.LoginRequest;
 import com.charlie.quizlet.auth.dto.RefreshTokenRequest;
 import com.charlie.quizlet.auth.dto.RegisterRequest;
+import com.charlie.quizlet.auth.dto.RegisterResponse;
 import com.charlie.quizlet.auth.dto.ResetPasswordRequest;
 import com.charlie.quizlet.auth.reset.PasswordResetService;
 import com.charlie.quizlet.common.ApiPaths;
@@ -41,11 +42,13 @@ public class AuthController {
     @PostMapping(ApiPaths.AUTH_REGISTER)
     @ResponseStatus(HttpStatus.CREATED)
     @SecurityRequirements
-    @Operation(summary = "Register a new STUDENT account and return an access token")
+    @Operation(summary = "Register a STUDENT or TEACHER account",
+            description = "STUDENT accounts are active and logged in at once. TEACHER accounts wait for admin approval: "
+                    + "status is PENDING and session is null.")
     @ApiResponse(responseCode = "201", description = "Registered")
     @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(responseCode = "409", description = "Email is already registered", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
-    public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
+    public RegisterResponse register(@Valid @RequestBody RegisterRequest request) {
         return authService.register(request);
     }
 

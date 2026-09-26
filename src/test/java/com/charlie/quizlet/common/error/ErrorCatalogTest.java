@@ -20,7 +20,7 @@ class ErrorCatalogTest {
 
     private final ErrorCodeRepository repository = mock(ErrorCodeRepository.class);
     private final ErrorCatalog catalog = new ErrorCatalog(repository,
-            new AppProperties(null, null, null, new AppProperties.ErrorCodes(Duration.ofMinutes(5))),
+            new AppProperties(null, null, null, new AppProperties.ErrorCodes(Duration.ofMinutes(5)), null),
             Clock.systemUTC());
 
     @Test

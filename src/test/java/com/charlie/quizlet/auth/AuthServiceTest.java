@@ -23,6 +23,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import com.charlie.quizlet.auth.dto.AuthResponse;
 import com.charlie.quizlet.auth.dto.LoginRequest;
 import com.charlie.quizlet.auth.dto.RegisterRequest;
+import com.charlie.quizlet.auth.dto.RegisterResponse;
+import com.charlie.quizlet.auth.dto.RegistrationRole;
 import com.charlie.quizlet.common.error.BusinessException;
 import com.charlie.quizlet.common.error.ErrorCode;
 import com.charlie.quizlet.user.Role;
@@ -55,7 +57,9 @@ class AuthServiceTest {
 
     @Test
     void registerCreatesActiveStudentWithNormalizedEmail() {
-        AuthResponse res = service.register(new RegisterRequest("  Alice@Example.COM ", "secret123", "  Alice  "));
+        RegisterResponse registered = service.register(
+                new RegisterRequest("  Alice@Example.COM ", "secret123", "  Alice  ", RegistrationRole.STUDENT));
+        AuthResponse res = registered.session();
 
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
         verify(userRepository).saveAndFlush(saved.capture());
@@ -70,10 +74,25 @@ class AuthServiceTest {
     }
 
     @Test
+    void registerTeacherWaitsForApprovalWithoutSession() {
+        RegisterResponse res = service.register(
+                new RegisterRequest("bob@example.com", "secret123", "Bob", RegistrationRole.TEACHER));
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getRole()).isEqualTo(Role.TEACHER);
+        assertThat(saved.getValue().getStatus()).isEqualTo(UserStatus.PENDING);
+        assertThat(res.user().status()).isEqualTo(UserStatus.PENDING);
+        assertThat(res.session()).isNull();
+        verify(refreshTokenRepository, never()).save(any());
+    }
+
+    @Test
     void registerRejectsDuplicateEmail() {
         given(userRepository.existsByEmail("alice@example.com")).willReturn(true);
 
-        assertThatThrownBy(() -> service.register(new RegisterRequest("alice@example.com", "secret123", "Alice")))
+        assertThatThrownBy(() -> service.register(
+                new RegisterRequest("alice@example.com", "secret123", "Alice", RegistrationRole.STUDENT)))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.AUTH_EMAIL_ALREADY_REGISTERED);

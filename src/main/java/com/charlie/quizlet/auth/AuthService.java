@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.charlie.quizlet.auth.dto.AuthResponse;
 import com.charlie.quizlet.auth.dto.LoginRequest;
 import com.charlie.quizlet.auth.dto.RegisterRequest;
+import com.charlie.quizlet.auth.dto.RegisterResponse;
 import com.charlie.quizlet.common.error.BusinessException;
 import com.charlie.quizlet.common.error.ErrorCode;
 import com.charlie.quizlet.user.Role;
@@ -43,7 +44,7 @@ public class AuthService {
     private final Clock clock;
 
     @Transactional
-    public AuthResponse register(RegisterRequest request) {
+    public RegisterResponse register(RegisterRequest request) {
         String email = normalizeEmail(request.email());
         if (userRepository.existsByEmail(email)) {
             throw new BusinessException(ErrorCode.AUTH_EMAIL_ALREADY_REGISTERED);
@@ -53,12 +54,13 @@ public class AuthService {
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setFullName(request.fullName().trim());
-        // Tự đăng ký luôn là STUDENT; TEACHER/ADMIN do admin cấp.
-        user.setRole(Role.STUDENT);
-        user.setStatus(UserStatus.ACTIVE);
+        user.setRole(request.role().toRole());
+        // Teacher tạo được câu hỏi / đề thi nên phải chờ Admin duyệt mới đăng nhập được.
+        user.setStatus(user.getRole() == Role.TEACHER ? UserStatus.PENDING : UserStatus.ACTIVE);
         userRepository.saveAndFlush(user);
 
-        return issueTokens(user, UUID.randomUUID());
+        AuthResponse session = user.getStatus() == UserStatus.ACTIVE ? issueTokens(user, UUID.randomUUID()) : null;
+        return new RegisterResponse(UserResponse.from(user), session);
     }
 
     @Transactional

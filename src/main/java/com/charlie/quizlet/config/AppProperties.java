@@ -11,7 +11,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * đọc qua class này — không dùng {@code @Value("${...}")} rải rác. JWT có class riêng: {@code JwtProperties}.
  */
 @ConfigurationProperties(prefix = "app")
-public record AppProperties(Frontend frontend, Cors cors, PasswordReset passwordReset, ErrorCodes errorCodes) {
+public record AppProperties(Frontend frontend, Cors cors, PasswordReset passwordReset, ErrorCodes errorCodes,
+        Admin admin) {
 
     /** Ứng dụng Angular — dùng để tạo link gửi cho người dùng. */
     public record Frontend(String url, String resetPasswordPath) {
@@ -47,6 +48,26 @@ public record AppProperties(Frontend frontend, Cors cors, PasswordReset password
 
         public ErrorCodes {
             Objects.requireNonNull(cacheTtl, "app.error-codes.cache-ttl is required");
+        }
+    }
+
+    /**
+     * Tài khoản Admin tạo sẵn lúc khởi động (không ai tự đăng ký được ADMIN). Bỏ trống email thì không tạo.
+     * Chỉ tạo khi email chưa có trong DB — đổi mật khẩu ở đây không đổi mật khẩu của tài khoản đã tạo.
+     */
+    public record Admin(String email, String password, String fullName) {
+
+        public Admin {
+            if (email != null && !email.isBlank()) {
+                if (password == null || password.length() < 8) {
+                    throw new IllegalArgumentException("app.admin.password must be at least 8 characters");
+                }
+                Objects.requireNonNull(fullName, "app.admin.full-name is required");
+            }
+        }
+
+        public boolean enabled() {
+            return email != null && !email.isBlank();
         }
     }
 }

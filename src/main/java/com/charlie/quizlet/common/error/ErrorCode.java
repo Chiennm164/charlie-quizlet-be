@@ -23,7 +23,9 @@ public enum ErrorCode {
     AUTH_USER_NOT_FOUND(HttpStatus.UNAUTHORIZED, "This account no longer exists"),
     AUTH_EMAIL_ALREADY_REGISTERED(HttpStatus.CONFLICT, "This email is already registered"),
     AUTH_RESET_TOKEN_INVALID(HttpStatus.BAD_REQUEST, "The reset link is invalid or has expired"),
-    AUTH_REFRESH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "Your session has expired");
+    AUTH_REFRESH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "Your session has expired"),
+
+    ADMIN_USER_NOT_PENDING(HttpStatus.CONFLICT, "This account is not waiting for approval");
 
     private final HttpStatus defaultStatus;
     private final String defaultMessage;

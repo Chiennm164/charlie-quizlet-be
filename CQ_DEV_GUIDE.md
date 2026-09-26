@@ -12,7 +12,8 @@ src/main/java/com/charlie/quizlet/
 │   ├── GlobalExceptionHandler   # mọi lỗi -> problem detail có errorCode
 │   └── error/         # ErrorCode (enum), BusinessException, ErrorCatalog (đọc + cache bảng error_codes)
 ├── auth/              # đăng ký, đăng nhập, JWT, refresh token; reset/ = quên / đặt lại mật khẩu
-└── user/              # User entity, Role, UserStatus, UserResponse
+├── user/              # User entity, Role, UserStatus, UserResponse
+└── admin/             # AdminAccountInitializer (tạo Admin lúc khởi động), duyệt tài khoản chờ duyệt
 src/main/resources/
 ├── application.yml                 # cấu hình (app.* -> AppProperties)
 ├── ValidationMessages_vi.properties  # câu lỗi validate tiếng Việt
@@ -96,7 +97,7 @@ public class StudySetController {
 ```
 
 - Endpoint công khai: thêm path vào `ApiPaths.PUBLIC_GET` / `PUBLIC_POST` và thêm `@SecurityRequirements` (rỗng) vào method.
-- Phân quyền theo role: claim `role` đã map thành `ROLE_*` → dùng `.requestMatchers(...).hasRole("TEACHER")` trong `SecurityConfig`. Muốn dùng `@PreAuthorize("hasRole('ADMIN')")` trên method thì bật `@EnableMethodSecurity` (hiện chưa bật).
+- Phân quyền theo role: claim `role` đã map thành `ROLE_*` → dùng `.requestMatchers(...).hasRole("TEACHER")` trong `SecurityConfig` (vd. `ApiPaths.ADMIN_ALL` → `hasRole("ADMIN")`). Muốn dùng `@PreAuthorize("hasRole('ADMIN')")` trên method thì bật `@EnableMethodSecurity` (hiện chưa bật).
 - Xong API: kiểm tra trên Swagger UI (`/swagger-ui.html`), cập nhật bảng API trong README, báo FE thêm `API_ENDPOINTS` + model.
 
 ## 4. Lỗi
@@ -133,7 +134,8 @@ src/main/resources/db/migration/
   V2__create_password_reset_tokens.sql
   V3__create_error_codes.sql
   V4__create_refresh_tokens.sql
-  V5__...                      ← thay đổi tiếp theo luôn là file mới
+  V5__add_admin_error_codes.sql
+  V6__...                      ← thay đổi tiếp theo luôn là file mới
 ```
 
 - Chạy tự động khi khởi động app (và khi chạy `CharlieQuizletBeApplicationTests`).

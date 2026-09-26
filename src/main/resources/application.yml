@@ -33,6 +33,12 @@ app:
   error-codes:
     # Thời gian cache bảng error_codes; sửa thông báo lỗi trong DB có hiệu lực sau khoảng này.
     cache-ttl: ${ERROR_CODES_CACHE_TTL:PT5M}
+  admin:
+    # Tài khoản Admin tạo lúc khởi động nếu email chưa tồn tại. Mặc định chỉ dùng cho dev;
+    # môi trường khác BẮT BUỘC đặt ADMIN_PASSWORD (hoặc để ADMIN_EMAIL rỗng để không tạo).
+    email: ${ADMIN_EMAIL:admin@charlie-quizlet.local}
+    password: ${ADMIN_PASSWORD:admin12345}
+    full-name: ${ADMIN_FULL_NAME:Administrator}
   jwt:
     # Giá trị mặc định chỉ dùng cho dev; môi trường khác BẮT BUỘC đặt JWT_SECRET (>= 32 byte).
     secret: ${JWT_SECRET:dev-only-secret-change-me-0123456789abcdef}

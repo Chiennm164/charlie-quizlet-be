@@ -44,6 +44,7 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.GET, ApiPaths.PUBLIC_GET).permitAll()
                         .requestMatchers(HttpMethod.POST, ApiPaths.PUBLIC_POST).permitAll()
+                        .requestMatchers(ApiPaths.ADMIN_ALL).hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e.authenticationEntryPoint(unauthorized).accessDeniedHandler(forbidden))
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()).authenticationEntryPoint(unauthorized))

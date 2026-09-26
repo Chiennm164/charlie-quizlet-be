@@ -18,6 +18,13 @@ public final class ApiPaths {
     public static final String AUTH_REFRESH = AUTH + "/refresh";
     public static final String AUTH_LOGOUT = AUTH + "/logout";
 
+    /** Mọi đường dẫn dưới /api/admin chỉ ADMIN gọi được (SecurityConfig). */
+    public static final String ADMIN = API + "/admin";
+    public static final String ADMIN_ALL = ADMIN + "/**";
+    public static final String ADMIN_USERS_PENDING = ADMIN + "/users/pending";
+    public static final String ADMIN_USER_APPROVE = ADMIN + "/users/{id}/approve";
+    public static final String ADMIN_USER_REJECT = ADMIN + "/users/{id}/reject";
+
     /**
      * POST không cần đăng nhập. Làm mới phiên / đăng xuất dùng refresh token trong body thay cho Bearer token,
      * vì lúc đó access token có thể đã hết hạn.

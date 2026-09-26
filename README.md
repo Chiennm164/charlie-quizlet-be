@@ -37,13 +37,15 @@ Cấu hình qua biến môi trường (mặc định trong `application.yml`, đ
 `SWAGGER_ENABLED` (mặc định `true`; đặt `false` khi deploy production),
 `FRONTEND_URL` (mặc định `http://localhost:4200`, dùng để tạo link đặt lại mật khẩu),
 `PASSWORD_RESET_TOKEN_TTL` (mặc định `PT30M`),
-`ERROR_CODES_CACHE_TTL` (mặc định `PT5M` — thời gian cache bảng `error_codes`).
+`ERROR_CODES_CACHE_TTL` (mặc định `PT5M` — thời gian cache bảng `error_codes`),
+`ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_FULL_NAME` (tài khoản Admin tạo lúc khởi động nếu email chưa có; mặc định dev
+`admin@charlie-quizlet.local` / `admin12345` — **bắt buộc đổi mật khẩu khi deploy**, hoặc để `ADMIN_EMAIL` rỗng để không tạo).
 
 ## Auth API
 
 | Method | Path | Auth | Mô tả |
 |---|---|---|---|
-| POST | `/api/auth/register` | — | `{email, password, fullName}` → 201 + token (role mặc định `STUDENT`) |
+| POST | `/api/auth/register` | — | `{email, password, fullName, role}` (`role`: `STUDENT` \| `TEACHER`) → 201 + `{user, session}`. Teacher có `status: PENDING`, `session: null` — chờ Admin duyệt mới đăng nhập được |
 | POST | `/api/auth/login` | — | `{email, password}` → token |
 | POST | `/api/auth/refresh` | — | `{refreshToken}` → cặp token mới. Refresh token dùng 1 lần (token cũ bị thu hồi) |
 | POST | `/api/auth/logout` | — | `{refreshToken}` → 204. Thu hồi refresh token của phiên; token sai / đã thu hồi cũng 204 |
@@ -51,8 +53,18 @@ Cấu hình qua biến môi trường (mặc định trong `application.yml`, đ
 | POST | `/api/auth/reset-password` | — | `{token, newPassword}` → 204. Token dùng 1 lần, hết hạn sau `PASSWORD_RESET_TOKEN_TTL`; đăng xuất mọi thiết bị |
 | GET | `/api/auth/me` | Bearer | Thông tin user hiện tại |
 
-"Token" trả về từ register / login / refresh: `{accessToken, tokenType, expiresIn, refreshToken, user}` (`expiresIn` tính bằng giây).
+"Token" trả về từ login / refresh (và `session` của register): `{accessToken, tokenType, expiresIn, refreshToken, user}` (`expiresIn` tính bằng giây).
 Các API khác gửi header `Authorization: Bearer <accessToken>`.
+
+## Admin API
+
+Chỉ role `ADMIN` (`/api/admin/**`, role khác → 403 `COMMON_FORBIDDEN`).
+
+| Method | Path | Mô tả |
+|---|---|---|
+| GET | `/api/admin/users/pending` | Danh sách tài khoản chờ duyệt, cũ nhất trước |
+| POST | `/api/admin/users/{id}/approve` | Duyệt → `status: ACTIVE`, trả user. Không ở trạng thái chờ → 409 `ADMIN_USER_NOT_PENDING` |
+| POST | `/api/admin/users/{id}/reject` | Từ chối → 204, **xoá** tài khoản (email đăng ký lại được) |
 
 **Refresh token:**
 
@@ -105,6 +117,7 @@ thêm vào `ERROR_CODES` ở `src/app/core/config/error-codes.ts` của repo FE.
 |---|---|
 | Chung | `COMMON_BAD_REQUEST`, `COMMON_VALIDATION_FAILED`, `COMMON_UNAUTHORIZED`, `COMMON_FORBIDDEN`, `COMMON_NOT_FOUND`, `COMMON_CONFLICT`, `COMMON_INTERNAL_ERROR` |
 | Auth | `AUTH_INVALID_CREDENTIALS`, `AUTH_ACCOUNT_LOCKED`, `AUTH_ACCOUNT_PENDING`, `AUTH_USER_NOT_FOUND`, `AUTH_EMAIL_ALREADY_REGISTERED`, `AUTH_RESET_TOKEN_INVALID`, `AUTH_REFRESH_TOKEN_INVALID` |
+| Admin | `ADMIN_USER_NOT_PENDING` |
 
 ## Cấu trúc
 
@@ -116,9 +129,10 @@ src/main/java/com/charlie/quizlet/
 ├── auth/          # đăng ký, đăng nhập, JWT, refresh token (làm mới / đăng xuất)
 │   └── reset/     # quên / đặt lại mật khẩu
 ├── user/
+├── admin/         # tạo Admin lúc khởi động, duyệt / từ chối tài khoản chờ duyệt
 └── <feature>/     # question, exam, flashcard...
 src/main/resources/
 ├── application.yml
 ├── ValidationMessages_vi.properties   # câu lỗi validate tiếng Việt
-└── db/migration/                      # Flyway: V1 users, V2 password_reset_tokens, V3 error_codes, V4 refresh_tokens
+└── db/migration/                      # Flyway: V1 users, V2 password_reset_tokens, V3 error_codes, V4 refresh_tokens, V5 mã lỗi admin
 ```
