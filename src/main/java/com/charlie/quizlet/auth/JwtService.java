@@ -1,5 +1,6 @@
 package com.charlie.quizlet.auth;
 
+import java.time.Clock;
 import java.time.Instant;
 
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
@@ -18,12 +19,14 @@ import lombok.RequiredArgsConstructor;
 public class JwtService {
 
     public static final String ROLE_CLAIM = "role";
+    public static final String TOKEN_TYPE = "Bearer";
 
     private final JwtEncoder jwtEncoder;
     private final JwtProperties properties;
+    private final Clock clock;
 
     public String issueAccessToken(User user) {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer(properties.issuer())
                 .subject(user.getId().toString())

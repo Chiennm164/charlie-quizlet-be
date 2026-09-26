@@ -14,15 +14,38 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+  web:
+    # Ngôn ngữ thông báo lỗi lấy theo header Accept-Language; request không gửi header thì dùng tiếng Việt.
+    locale: vi
+    locale-resolver: accept-header
 
 app:
+  # Cấu hình riêng của app — đọc trong code qua config/AppProperties (JWT: auth/JwtProperties).
+  frontend:
+    # URL của app Angular, dùng để tạo link gửi cho người dùng (vd. đặt lại mật khẩu).
+    url: ${FRONTEND_URL:http://localhost:4200}
+    # Phải khớp route 'reset-password' của FE (src/app/core/config/routes.ts).
+    reset-password-path: /reset-password
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
+  password-reset:
+    token-ttl: ${PASSWORD_RESET_TOKEN_TTL:PT30M}
+  error-codes:
+    # Thời gian cache bảng error_codes; sửa thông báo lỗi trong DB có hiệu lực sau khoảng này.
+    cache-ttl: ${ERROR_CODES_CACHE_TTL:PT5M}
   jwt:
-    # Dev-only default; always set JWT_SECRET (>= 32 bytes) in other environments.
+    # Giá trị mặc định chỉ dùng cho dev; môi trường khác BẮT BUỘC đặt JWT_SECRET (>= 32 byte).
     secret: ${JWT_SECRET:dev-only-secret-change-me-0123456789abcdef}
     issuer: charlie-quizlet
     expiration: ${JWT_EXPIRATION:PT24H}
+
+springdoc:
+  # Tắt trên production: SWAGGER_ENABLED=false.
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:true}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:true}
+    persist-authorization: true
 
 management:
   endpoints:

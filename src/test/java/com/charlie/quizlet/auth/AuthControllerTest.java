@@ -1,6 +1,7 @@
 package com.charlie.quizlet.auth;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -14,16 +15,20 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.web.server.ResponseStatusException;
 
 import com.charlie.quizlet.auth.dto.AuthResponse;
 import com.charlie.quizlet.auth.dto.LoginRequest;
 import com.charlie.quizlet.auth.dto.RegisterRequest;
+import com.charlie.quizlet.auth.reset.PasswordResetService;
 import com.charlie.quizlet.common.GlobalExceptionHandler;
+import com.charlie.quizlet.common.error.BusinessException;
+import com.charlie.quizlet.common.error.ErrorCatalog;
+import com.charlie.quizlet.common.error.ErrorCode;
+import com.charlie.quizlet.common.error.ErrorCodeRepository;
+import com.charlie.quizlet.config.AppConfig;
 import com.charlie.quizlet.config.JwtConfig;
 import com.charlie.quizlet.config.SecurityConfig;
 import com.charlie.quizlet.user.Role;
@@ -32,7 +37,8 @@ import com.charlie.quizlet.user.UserResponse;
 import com.charlie.quizlet.user.UserStatus;
 
 @WebMvcTest(AuthController.class)
-@Import({ SecurityConfig.class, JwtConfig.class, JwtService.class, GlobalExceptionHandler.class })
+@Import({ AppConfig.class, SecurityConfig.class, JwtConfig.class, JwtService.class, GlobalExceptionHandler.class,
+        ErrorCatalog.class })
 class AuthControllerTest {
 
     private static final UserResponse ALICE = new UserResponse(42L, "alice@example.com", "Alice", Role.STUDENT,
@@ -46,6 +52,13 @@ class AuthControllerTest {
 
     @MockitoBean
     private AuthService authService;
+
+    @MockitoBean
+    private PasswordResetService passwordResetService;
+
+    /** Bảng error_codes rỗng -> dùng message mặc định trong enum ErrorCode. */
+    @MockitoBean
+    private ErrorCodeRepository errorCodeRepository;
 
     @Test
     void registerIsPublicAndReturnsCreated() throws Exception {
@@ -63,6 +76,22 @@ class AuthControllerTest {
     }
 
     @Test
+    void validationMessagesFollowAcceptLanguage() throws Exception {
+        String body = """
+                {"email":"alice@example.com","password":"secret123","fullName":""}
+                """;
+
+        mockMvc.perform(post("/api/auth/register").header("Accept-Language", "vi")
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(jsonPath("$.errors.fullName").value("không được để trống"))
+                .andExpect(jsonPath("$.errorCode").value("COMMON_VALIDATION_FAILED"));
+
+        mockMvc.perform(post("/api/auth/register").header("Accept-Language", "en")
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(jsonPath("$.errors.fullName").value("must not be blank"));
+    }
+
+    @Test
     void registerRejectsInvalidBody() throws Exception {
         mockMvc.perform(post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -70,6 +99,7 @@ class AuthControllerTest {
                         {"email":"not-an-email","password":"short","fullName":""}
                         """))
                 .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("COMMON_VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.errors.email").exists())
                 .andExpect(jsonPath("$.errors.password").exists())
                 .andExpect(jsonPath("$.errors.fullName").exists());
@@ -78,7 +108,7 @@ class AuthControllerTest {
     @Test
     void loginWithBadCredentialsReturnsUnauthorized() throws Exception {
         given(authService.login(any(LoginRequest.class)))
-                .willThrow(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password"));
+                .willThrow(new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS));
 
         mockMvc.perform(post("/api/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -86,12 +116,62 @@ class AuthControllerTest {
                         {"email":"alice@example.com","password":"wrong-password"}
                         """))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.detail").value("Invalid email or password"));
+                .andExpect(jsonPath("$.errorCode").value("AUTH_INVALID_CREDENTIALS"))
+                .andExpect(jsonPath("$.errorMessage").value("Incorrect email or password"));
+    }
+
+    @Test
+    void forgotPasswordIsPublicAndReturnsNoContent() throws Exception {
+        mockMvc.perform(post("/api/auth/forgot-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"email":"alice@example.com"}
+                        """))
+                .andExpect(status().isNoContent());
+        verify(passwordResetService).requestReset("alice@example.com");
+    }
+
+    @Test
+    void forgotPasswordRejectsInvalidEmail() throws Exception {
+        mockMvc.perform(post("/api/auth/forgot-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"email":"not-an-email"}
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.email").exists());
+    }
+
+    @Test
+    void resetPasswordIsPublicAndReturnsNoContent() throws Exception {
+        mockMvc.perform(post("/api/auth/reset-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"token":"abc","newPassword":"newsecret123"}
+                        """))
+                .andExpect(status().isNoContent());
+        verify(passwordResetService).resetPassword("abc", "newsecret123");
+    }
+
+    @Test
+    void resetPasswordWithBadTokenReturnsBadRequest() throws Exception {
+        willThrow(new BusinessException(ErrorCode.AUTH_RESET_TOKEN_INVALID))
+                .given(passwordResetService).resetPassword("bad", "newsecret123");
+
+        mockMvc.perform(post("/api/auth/reset-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"token":"bad","newPassword":"newsecret123"}
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("AUTH_RESET_TOKEN_INVALID"));
     }
 
     @Test
     void meWithoutTokenIsUnauthorized() throws Exception {
-        mockMvc.perform(get("/api/auth/me")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/auth/me"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("COMMON_UNAUTHORIZED"));
     }
 
     @Test

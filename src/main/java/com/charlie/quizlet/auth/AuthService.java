@@ -2,15 +2,15 @@ package com.charlie.quizlet.auth;
 
 import java.util.Locale;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import com.charlie.quizlet.auth.dto.AuthResponse;
 import com.charlie.quizlet.auth.dto.LoginRequest;
 import com.charlie.quizlet.auth.dto.RegisterRequest;
+import com.charlie.quizlet.common.error.BusinessException;
+import com.charlie.quizlet.common.error.ErrorCode;
 import com.charlie.quizlet.user.Role;
 import com.charlie.quizlet.user.User;
 import com.charlie.quizlet.user.UserRepository;
@@ -31,7 +31,7 @@ public class AuthService {
     public AuthResponse register(RegisterRequest request) {
         String email = normalizeEmail(request.email());
         if (userRepository.existsByEmail(email)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already registered");
+            throw new BusinessException(ErrorCode.AUTH_EMAIL_ALREADY_REGISTERED);
         }
 
         User user = new User();
@@ -50,7 +50,7 @@ public class AuthService {
     public AuthResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(normalizeEmail(request.email()))
                 .filter(u -> passwordEncoder.matches(request.password(), u.getPasswordHash()))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS));
         ensureActive(user);
         return toAuthResponse(user);
     }
@@ -58,7 +58,7 @@ public class AuthService {
     @Transactional(readOnly = true)
     public UserResponse currentUser(Long userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User no longer exists"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_USER_NOT_FOUND));
         ensureActive(user);
         return UserResponse.from(user);
     }
@@ -66,13 +66,13 @@ public class AuthService {
     private void ensureActive(User user) {
         switch (user.getStatus()) {
             case ACTIVE -> { }
-            case LOCKED -> throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account is locked");
-            case PENDING -> throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Account is pending approval");
+            case LOCKED -> throw new BusinessException(ErrorCode.AUTH_ACCOUNT_LOCKED);
+            case PENDING -> throw new BusinessException(ErrorCode.AUTH_ACCOUNT_PENDING);
         }
     }
 
     private AuthResponse toAuthResponse(User user) {
-        return new AuthResponse(jwtService.issueAccessToken(user), "Bearer", jwtService.expiresInSeconds(),
+        return new AuthResponse(jwtService.issueAccessToken(user), JwtService.TOKEN_TYPE, jwtService.expiresInSeconds(),
                 UserResponse.from(user));
     }
 
