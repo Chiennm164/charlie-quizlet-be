@@ -135,7 +135,8 @@ src/main/resources/db/migration/
   V3__create_error_codes.sql
   V4__create_refresh_tokens.sql
   V5__add_admin_error_codes.sql
-  V6__...                      ← thay đổi tiếp theo luôn là file mới
+  V6__add_change_password_error_code.sql
+  V7__...                      ← thay đổi tiếp theo luôn là file mới
 ```
 
 - Chạy tự động khi khởi động app (và khi chạy `CharlieQuizletBeApplicationTests`).

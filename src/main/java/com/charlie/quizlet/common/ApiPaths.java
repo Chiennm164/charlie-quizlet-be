@@ -17,6 +17,7 @@ public final class ApiPaths {
     public static final String AUTH_ME = AUTH + "/me";
     public static final String AUTH_REFRESH = AUTH + "/refresh";
     public static final String AUTH_LOGOUT = AUTH + "/logout";
+    public static final String AUTH_CHANGE_PASSWORD = AUTH + "/change-password";
 
     /** Mọi đường dẫn dưới /api/admin chỉ ADMIN gọi được (SecurityConfig). */
     public static final String ADMIN = API + "/admin";

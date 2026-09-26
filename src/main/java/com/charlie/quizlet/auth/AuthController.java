@@ -5,18 +5,21 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.charlie.quizlet.auth.dto.AuthResponse;
+import com.charlie.quizlet.auth.dto.ChangePasswordRequest;
 import com.charlie.quizlet.auth.dto.ForgotPasswordRequest;
 import com.charlie.quizlet.auth.dto.LoginRequest;
 import com.charlie.quizlet.auth.dto.RefreshTokenRequest;
 import com.charlie.quizlet.auth.dto.RegisterRequest;
 import com.charlie.quizlet.auth.dto.RegisterResponse;
 import com.charlie.quizlet.auth.dto.ResetPasswordRequest;
+import com.charlie.quizlet.auth.dto.UpdateProfileRequest;
 import com.charlie.quizlet.auth.reset.PasswordResetService;
 import com.charlie.quizlet.common.ApiPaths;
 import com.charlie.quizlet.user.UserResponse;
@@ -33,7 +36,7 @@ import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequiredArgsConstructor
-@Tag(name = "Auth", description = "Registration, login, password reset and current user")
+@Tag(name = "Auth", description = "Registration, login, password reset, current user and profile")
 public class AuthController {
 
     private final AuthService authService;
@@ -112,5 +115,26 @@ public class AuthController {
     @ApiResponse(responseCode = "401", description = "Missing, invalid or expired token", content = @Content)
     public UserResponse me(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt) {
         return authService.currentUser(Long.valueOf(jwt.getSubject()));
+    }
+
+    @PatchMapping(ApiPaths.AUTH_ME)
+    @Operation(summary = "Update the profile (full name) of the current user")
+    @ApiResponse(responseCode = "200", description = "Updated user")
+    @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "401", description = "Missing, invalid or expired token", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    public UserResponse updateProfile(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody UpdateProfileRequest request) {
+        return authService.updateProfile(Long.valueOf(jwt.getSubject()), request);
+    }
+
+    @PostMapping(ApiPaths.AUTH_CHANGE_PASSWORD)
+    @Operation(summary = "Change the password of the current user",
+            description = "Logs out every other device and returns a new session for this one.")
+    @ApiResponse(responseCode = "200", description = "Password changed, new tokens")
+    @ApiResponse(responseCode = "400", description = "Validation failed, or the current password is incorrect", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(responseCode = "401", description = "Missing, invalid or expired token", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    public AuthResponse changePassword(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody ChangePasswordRequest request) {
+        return authService.changePassword(Long.valueOf(jwt.getSubject()), request);
     }
 }

@@ -1,11 +1,13 @@
 package com.charlie.quizlet.auth;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -21,9 +23,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.charlie.quizlet.auth.dto.AuthResponse;
+import com.charlie.quizlet.auth.dto.ChangePasswordRequest;
 import com.charlie.quizlet.auth.dto.LoginRequest;
 import com.charlie.quizlet.auth.dto.RegisterRequest;
 import com.charlie.quizlet.auth.dto.RegisterResponse;
+import com.charlie.quizlet.auth.dto.UpdateProfileRequest;
 import com.charlie.quizlet.auth.reset.PasswordResetService;
 import com.charlie.quizlet.common.GlobalExceptionHandler;
 import com.charlie.quizlet.common.error.BusinessException;
@@ -259,6 +263,54 @@ class AuthControllerTest {
 
         mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + tampered))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void updateProfileRequiresTokenAndValidName() throws Exception {
+        String body = """
+                {"fullName":"Alice Nguyen"}
+                """;
+        mockMvc.perform(patch("/api/auth/me").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(patch("/api/auth/me").header("Authorization", "Bearer " + tokenFor(42L))
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                        {"fullName":"  "}
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.fullName").exists());
+
+        given(authService.updateProfile(eq(42L), any(UpdateProfileRequest.class))).willReturn(ALICE);
+        mockMvc.perform(patch("/api/auth/me").header("Authorization", "Bearer " + tokenFor(42L))
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(42));
+    }
+
+    @Test
+    void changePasswordReturnsNewTokens() throws Exception {
+        given(authService.changePassword(eq(42L), any(ChangePasswordRequest.class)))
+                .willReturn(new AuthResponse("new-access", "Bearer", 900, "new-refresh", ALICE));
+
+        mockMvc.perform(post("/api/auth/change-password").header("Authorization", "Bearer " + tokenFor(42L))
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                        {"currentPassword":"secret123","newPassword":"newsecret123"}
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.refreshToken").value("new-refresh"));
+    }
+
+    @Test
+    void changePasswordWithWrongCurrentPasswordIsBadRequest() throws Exception {
+        given(authService.changePassword(eq(42L), any(ChangePasswordRequest.class)))
+                .willThrow(new BusinessException(ErrorCode.AUTH_CURRENT_PASSWORD_INCORRECT));
+
+        mockMvc.perform(post("/api/auth/change-password").header("Authorization", "Bearer " + tokenFor(42L))
+                .contentType(MediaType.APPLICATION_JSON).content("""
+                        {"currentPassword":"wrong","newPassword":"newsecret123"}
+                        """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("AUTH_CURRENT_PASSWORD_INCORRECT"));
     }
 
     private String tokenFor(long userId) {

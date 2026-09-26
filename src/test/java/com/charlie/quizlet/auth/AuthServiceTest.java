@@ -21,15 +21,18 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.charlie.quizlet.auth.dto.AuthResponse;
+import com.charlie.quizlet.auth.dto.ChangePasswordRequest;
 import com.charlie.quizlet.auth.dto.LoginRequest;
 import com.charlie.quizlet.auth.dto.RegisterRequest;
 import com.charlie.quizlet.auth.dto.RegisterResponse;
 import com.charlie.quizlet.auth.dto.RegistrationRole;
+import com.charlie.quizlet.auth.dto.UpdateProfileRequest;
 import com.charlie.quizlet.common.error.BusinessException;
 import com.charlie.quizlet.common.error.ErrorCode;
 import com.charlie.quizlet.user.Role;
 import com.charlie.quizlet.user.User;
 import com.charlie.quizlet.user.UserRepository;
+import com.charlie.quizlet.user.UserResponse;
 import com.charlie.quizlet.user.UserStatus;
 
 class AuthServiceTest {
@@ -184,6 +187,41 @@ class AuthServiceTest {
         assertErrorCode(() -> service.refresh("old-token"), ErrorCode.AUTH_ACCOUNT_LOCKED);
         assertThat(old.getRevokedAt()).isNull();
         verify(refreshTokenRepository, never()).save(any());
+    }
+
+    @Test
+    void updateProfileTrimsFullName() {
+        User alice = user(UserStatus.ACTIVE);
+        given(userRepository.findById(1L)).willReturn(Optional.of(alice));
+
+        UserResponse res = service.updateProfile(1L, new UpdateProfileRequest("  Alice Nguyen  "));
+
+        assertThat(alice.getFullName()).isEqualTo("Alice Nguyen");
+        assertThat(res.fullName()).isEqualTo("Alice Nguyen");
+    }
+
+    @Test
+    void changePasswordRevokesAllSessionsAndStartsNewOne() {
+        User alice = user(UserStatus.ACTIVE);
+        given(userRepository.findById(1L)).willReturn(Optional.of(alice));
+        given(passwordEncoder.encode("newsecret123")).willReturn("new-hash");
+
+        AuthResponse res = service.changePassword(1L, new ChangePasswordRequest("secret123", "newsecret123"));
+
+        assertThat(alice.getPasswordHash()).isEqualTo("new-hash");
+        verify(refreshTokenRepository).revokeAllForUser(1L, NOW);
+        assertThat(savedRefreshToken().getTokenHash()).isEqualTo(OpaqueTokens.hash(res.refreshToken()));
+    }
+
+    @Test
+    void changePasswordRejectsWrongCurrentPassword() {
+        User alice = user(UserStatus.ACTIVE);
+        given(userRepository.findById(1L)).willReturn(Optional.of(alice));
+
+        assertErrorCode(() -> service.changePassword(1L, new ChangePasswordRequest("wrong", "newsecret123")),
+                ErrorCode.AUTH_CURRENT_PASSWORD_INCORRECT);
+        assertThat(alice.getPasswordHash()).isEqualTo("hashed");
+        verify(refreshTokenRepository, never()).revokeAllForUser(any(), any());
     }
 
     @Test

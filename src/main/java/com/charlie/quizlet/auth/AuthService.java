@@ -11,9 +11,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.charlie.quizlet.auth.dto.AuthResponse;
+import com.charlie.quizlet.auth.dto.ChangePasswordRequest;
 import com.charlie.quizlet.auth.dto.LoginRequest;
 import com.charlie.quizlet.auth.dto.RegisterRequest;
 import com.charlie.quizlet.auth.dto.RegisterResponse;
+import com.charlie.quizlet.auth.dto.UpdateProfileRequest;
 import com.charlie.quizlet.common.error.BusinessException;
 import com.charlie.quizlet.common.error.ErrorCode;
 import com.charlie.quizlet.user.Role;
@@ -110,10 +112,36 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public UserResponse currentUser(Long userId) {
+        return UserResponse.from(findActiveUser(userId));
+    }
+
+    @Transactional
+    public UserResponse updateProfile(Long userId, UpdateProfileRequest request) {
+        User user = findActiveUser(userId);
+        user.setFullName(request.fullName().trim());
+        return UserResponse.from(user);
+    }
+
+    /**
+     * Đổi mật khẩu rồi đăng xuất mọi thiết bị khác (ai đang giữ phiên có thể là người đã biết mật khẩu cũ).
+     * Thiết bị đang đổi nhận phiên mới nên không phải đăng nhập lại.
+     */
+    @Transactional
+    public AuthResponse changePassword(Long userId, ChangePasswordRequest request) {
+        User user = findActiveUser(userId);
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+            throw new BusinessException(ErrorCode.AUTH_CURRENT_PASSWORD_INCORRECT);
+        }
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        refreshTokenRepository.revokeAllForUser(user.getId(), clock.instant());
+        return issueTokens(user, UUID.randomUUID());
+    }
+
+    private User findActiveUser(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_USER_NOT_FOUND));
         ensureActive(user);
-        return UserResponse.from(user);
+        return user;
     }
 
     private void ensureActive(User user) {

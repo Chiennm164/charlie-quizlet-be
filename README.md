@@ -52,8 +52,10 @@ Cấu hình qua biến môi trường (mặc định trong `application.yml`, đ
 | POST | `/api/auth/forgot-password` | — | `{email}` → 204. Luôn 204 dù email có tồn tại hay không (chống dò email) |
 | POST | `/api/auth/reset-password` | — | `{token, newPassword}` → 204. Token dùng 1 lần, hết hạn sau `PASSWORD_RESET_TOKEN_TTL`; đăng xuất mọi thiết bị |
 | GET | `/api/auth/me` | Bearer | Thông tin user hiện tại |
+| PATCH | `/api/auth/me` | Bearer | `{fullName}` → user sau khi sửa |
+| POST | `/api/auth/change-password` | Bearer | `{currentPassword, newPassword}` → token mới. Đăng xuất mọi thiết bị khác; sai mật khẩu hiện tại → 400 `AUTH_CURRENT_PASSWORD_INCORRECT` |
 
-"Token" trả về từ login / refresh (và `session` của register): `{accessToken, tokenType, expiresIn, refreshToken, user}` (`expiresIn` tính bằng giây).
+"Token" trả về từ login / refresh / change-password (và `session` của register): `{accessToken, tokenType, expiresIn, refreshToken, user}` (`expiresIn` tính bằng giây).
 Các API khác gửi header `Authorization: Bearer <accessToken>`.
 
 ## Admin API
@@ -73,7 +75,7 @@ Chỉ role `ADMIN` (`/api/admin/**`, role khác → 403 `COMMON_FORBIDDEN`).
   thay bằng token mới cùng `family_id` (1 family = 1 phiên đăng nhập).
 - Token đã thu hồi mà bị gửi lại quá 10 giây sau khi bị thay → nghi bị lộ, thu hồi cả phiên (người dùng phải đăng nhập lại).
   Gửi lại trong 10 giây (2 tab làm mới cùng lúc) chỉ bị từ chối.
-- Đặt lại mật khẩu thu hồi mọi phiên của user.
+- Đặt lại mật khẩu thu hồi mọi phiên của user. Đổi mật khẩu (đang đăng nhập) cũng vậy, nhưng cấp phiên mới cho thiết bị đang đổi.
 
 > Chưa có SMTP: link đặt lại mật khẩu được **ghi ra log** (`Password reset link for ...`).
 > Khi có mail server, thay `LoggingPasswordResetNotifier` bằng một implementation gửi mail của `PasswordResetNotifier`.
@@ -116,7 +118,7 @@ thêm vào `ERROR_CODES` ở `src/app/core/config/error-codes.ts` của repo FE.
 | Nhóm | Mã |
 |---|---|
 | Chung | `COMMON_BAD_REQUEST`, `COMMON_VALIDATION_FAILED`, `COMMON_UNAUTHORIZED`, `COMMON_FORBIDDEN`, `COMMON_NOT_FOUND`, `COMMON_CONFLICT`, `COMMON_INTERNAL_ERROR` |
-| Auth | `AUTH_INVALID_CREDENTIALS`, `AUTH_ACCOUNT_LOCKED`, `AUTH_ACCOUNT_PENDING`, `AUTH_USER_NOT_FOUND`, `AUTH_EMAIL_ALREADY_REGISTERED`, `AUTH_RESET_TOKEN_INVALID`, `AUTH_REFRESH_TOKEN_INVALID` |
+| Auth | `AUTH_INVALID_CREDENTIALS`, `AUTH_ACCOUNT_LOCKED`, `AUTH_ACCOUNT_PENDING`, `AUTH_USER_NOT_FOUND`, `AUTH_EMAIL_ALREADY_REGISTERED`, `AUTH_RESET_TOKEN_INVALID`, `AUTH_REFRESH_TOKEN_INVALID`, `AUTH_CURRENT_PASSWORD_INCORRECT` |
 | Admin | `ADMIN_USER_NOT_PENDING` |
 
 ## Cấu trúc
@@ -134,5 +136,5 @@ src/main/java/com/charlie/quizlet/
 src/main/resources/
 ├── application.yml
 ├── ValidationMessages_vi.properties   # câu lỗi validate tiếng Việt
-└── db/migration/                      # Flyway: V1 users, V2 password_reset_tokens, V3 error_codes, V4 refresh_tokens, V5 mã lỗi admin
+└── db/migration/                      # Flyway: V1 users, V2 password_reset_tokens, V3 error_codes, V4 refresh_tokens, V5–V6 mã lỗi mới
 ```
