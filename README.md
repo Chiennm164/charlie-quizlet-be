@@ -58,24 +58,6 @@ Cấu hình qua biến môi trường (mặc định trong `application.yml`, đ
 "Token" trả về từ login / refresh / change-password (và `session` của register): `{accessToken, tokenType, expiresIn, refreshToken, user}` (`expiresIn` tính bằng giây).
 Các API khác gửi header `Authorization: Bearer <accessToken>`.
 
-## Study set API (học phần)
-
-Cần đăng nhập. Học phần `PRIVATE` chỉ chủ xem được (người khác nhận 404 `STUDY_SET_NOT_FOUND`, không lộ là có tồn tại);
-`PUBLIC` thì ai đăng nhập cũng xem được, nhưng chỉ chủ sửa / xoá được (người khác 403 `COMMON_FORBIDDEN`).
-
-| Method | Path | Mô tả |
-|---|---|---|
-| GET | `/api/study-sets/mine?q=&sort=&page=&size=` | Học phần của tôi (không kèm thẻ, có `cardCount`). `q`: tiêu đề chứa (không phân biệt hoa thường); `sort`: `RECENT` (mặc định, mới sửa trước) \| `NEWEST` \| `TITLE`; `page` từ 0; `size` 1–50 (mặc định 12). Trả `{content, page, size, totalElements, totalPages}` |
-| POST | `/api/study-sets` | `{title, description?, visibility, cards: [{term, definition}]}` → 201 + học phần |
-| GET | `/api/study-sets/{id}` | Học phần kèm thẻ theo thứ tự |
-| PUT | `/api/study-sets/{id}` | Gửi **toàn bộ** thẻ theo thứ tự mới: thẻ có `id` được giữ và cập nhật, thẻ không có `id` được thêm, thẻ cũ không có trong danh sách bị xoá |
-| DELETE | `/api/study-sets/{id}` | 204, xoá cả thẻ |
-
-- Tối thiểu 2 thẻ, tối đa 500; `title` ≤ 255, `description` ≤ 2000, `term` ≤ 500, `definition` ≤ 2000 ký tự.
-- Thuật ngữ trùng (bỏ khoảng trắng đầu/cuối, không phân biệt hoa thường) → 400 `STUDY_SET_DUPLICATE_TERM`.
-- `id` thẻ không thuộc học phần (hoặc gửi 2 lần) → 400 `STUDY_SET_CARD_NOT_FOUND`.
-- Giữ `id` thẻ khi sửa để không mất dữ liệu gắn với thẻ (tiến độ ôn tập — giai đoạn 3).
-
 ## Quiz API (bộ đề trắc nghiệm)
 
 Cần đăng nhập. **Tạo / sửa / xoá / "của tôi" chỉ `TEACHER`, `ADMIN`** (role khác → 403 `COMMON_FORBIDDEN`).
@@ -157,7 +139,6 @@ thêm vào `ERROR_CODES` ở `src/app/core/config/error-codes.ts` của repo FE.
 | Chung | `COMMON_BAD_REQUEST`, `COMMON_VALIDATION_FAILED`, `COMMON_UNAUTHORIZED`, `COMMON_FORBIDDEN`, `COMMON_NOT_FOUND`, `COMMON_CONFLICT`, `COMMON_INTERNAL_ERROR` |
 | Auth | `AUTH_INVALID_CREDENTIALS`, `AUTH_ACCOUNT_LOCKED`, `AUTH_ACCOUNT_PENDING`, `AUTH_USER_NOT_FOUND`, `AUTH_EMAIL_ALREADY_REGISTERED`, `AUTH_RESET_TOKEN_INVALID`, `AUTH_REFRESH_TOKEN_INVALID`, `AUTH_CURRENT_PASSWORD_INCORRECT` |
 | Admin | `ADMIN_USER_NOT_PENDING` |
-| Học phần | `STUDY_SET_NOT_FOUND`, `STUDY_SET_DUPLICATE_TERM`, `STUDY_SET_CARD_NOT_FOUND` |
 | Bộ đề | `QUIZ_NOT_FOUND`, `QUIZ_CORRECT_OPTION_REQUIRED`, `QUIZ_DUPLICATE_OPTION`, `QUIZ_EMPTY`, `QUIZ_ITEM_NOT_FOUND` |
 
 ## Cấu trúc
@@ -171,11 +152,10 @@ src/main/java/com/charlie/quizlet/
 │   └── reset/     # quên / đặt lại mật khẩu
 ├── user/
 ├── admin/         # tạo Admin lúc khởi động, duyệt / từ chối tài khoản chờ duyệt
-├── studyset/      # học phần + thẻ
 ├── quiz/          # bộ đề trắc nghiệm: câu hỏi + đáp án (TEACHER / ADMIN soạn)
 └── <feature>/     # question, exam, flashcard...
 src/main/resources/
 ├── application.yml
 ├── ValidationMessages_vi.properties   # câu lỗi validate tiếng Việt
-└── db/migration/                      # Flyway: V1 users, V2 password_reset_tokens, V3 error_codes, V4 refresh_tokens, V5–V6 mã lỗi mới, V7 study_sets + cards, V8 quizzes + questions + question_options
+└── db/migration/                      # Flyway: V1 users, V2 password_reset_tokens, V3 error_codes, V4 refresh_tokens, V5–V6 mã lỗi mới, V7 study_sets + cards (đã xoá ở V9), V8 quizzes + questions + question_options
 ```

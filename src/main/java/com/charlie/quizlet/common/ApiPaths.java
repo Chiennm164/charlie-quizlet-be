@@ -19,10 +19,6 @@ public final class ApiPaths {
     public static final String AUTH_LOGOUT = AUTH + "/logout";
     public static final String AUTH_CHANGE_PASSWORD = AUTH + "/change-password";
 
-    public static final String STUDY_SETS = API + "/study-sets";
-    public static final String STUDY_SET = STUDY_SETS + "/{id}";
-    public static final String STUDY_SETS_MINE = STUDY_SETS + "/mine";
-
     /** Bộ đề: xem / làm thì ai đăng nhập cũng được; tạo / sửa / xoá / "của tôi" chỉ TEACHER, ADMIN (SecurityConfig). */
     public static final String QUIZZES = API + "/quizzes";
     public static final String QUIZ = QUIZZES + "/{id}";

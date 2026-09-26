@@ -14,7 +14,6 @@ src/main/java/com/charlie/quizlet/
 ├── auth/              # đăng ký, đăng nhập, JWT, refresh token; reset/ = quên / đặt lại mật khẩu
 ├── user/              # User entity, Role, UserStatus, UserResponse
 ├── admin/             # AdminAccountInitializer (tạo Admin lúc khởi động), duyệt tài khoản chờ duyệt
-├── studyset/          # học phần (StudySet) + thẻ (Card)
 └── quiz/              # bộ đề (Quiz) + câu hỏi (Question) + đáp án (QuestionOption)
 src/main/resources/
 ├── application.yml                 # cấu hình (app.* -> AppProperties)
@@ -69,37 +68,37 @@ public class PasswordResetService {
 
 ## 3. Thêm một API
 
-Ví dụ `GET /api/study-sets` (cần đăng nhập) — package `studyset/`:
+Ví dụ `GET /api/quizzes/mine` (Teacher / Admin) — package `quiz/`, bản đầy đủ: [QuizController](src/main/java/com/charlie/quizlet/quiz/QuizController.java):
 
 ```java
 // common/ApiPaths.java
-public static final String STUDY_SETS = API + "/study-sets";
+public static final String QUIZZES_MINE = QUIZZES + "/mine";
 
-// studyset/dto/StudySetResponse.java
-public record StudySetResponse(Long id, String title, int termCount, Instant createdAt) {
-    public static StudySetResponse from(StudySet s) { ... }
-}
+// quiz/dto/QuizSummaryResponse.java
+public record QuizSummaryResponse(Long id, String title, QuizStatus status, long questionCount, ...) { }
 
-// studyset/StudySetController.java
+// quiz/QuizController.java
 @RestController
 @RequiredArgsConstructor
-@Tag(name = "Study sets")
-public class StudySetController {
+@Tag(name = "Quizzes")
+public class QuizController {
 
-    private final StudySetService studySetService;
+    private final QuizService quizService;
 
-    @GetMapping(ApiPaths.STUDY_SETS)
-    @Operation(summary = "List study sets of the current user")
-    @ApiResponse(responseCode = "200", description = "OK")
-    @ApiResponse(responseCode = "401", description = "Missing or expired token", content = @Content)
-    public List<StudySetResponse> list(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt) {
-        return studySetService.listForUser(Long.valueOf(jwt.getSubject()));
+    @GetMapping(ApiPaths.QUIZZES_MINE)
+    @Operation(summary = "List quizzes authored by the current user, drafts included (TEACHER / ADMIN)")
+    @ApiResponse(responseCode = "200", description = "One page of quizzes")
+    @ApiResponse(responseCode = "403", description = "Not a teacher or admin", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
+    public PageResponse<QuizSummaryResponse> listMine(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(defaultValue = "") String q, @RequestParam(defaultValue = "RECENT") QuizSort sort,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "12") int size) {
+        return quizService.listMine(CurrentUser.from(jwt), q, sort, page, size);
     }
 }
 ```
 
 - Cần id + role người gọi (vd. Admin được sửa mọi thứ): `CurrentUser.from(jwt)` (`auth/CurrentUser`) — lấy từ token, không đọc lại DB.
-- Danh sách có phân trang: `PageRequests.of(page, size, sort)` + trả `PageResponse.from(page)` (`common/dto`); tìm "chứa chuỗi" dùng `SearchPatterns.contains(q)`, không trả thẳng `Page` của Spring Data. Cho sort bằng enum (vd. `StudySetSort`), không nhận tên cột từ client.
+- Danh sách có phân trang: `PageRequests.of(page, size, sort)` + trả `PageResponse.from(page)` (`common/dto`); tìm "chứa chuỗi" dùng `SearchPatterns.contains(q)`, không trả thẳng `Page` của Spring Data. Cho sort bằng enum (vd. `QuizSort`), không nhận tên cột từ client.
 - Endpoint công khai: thêm path vào `ApiPaths.PUBLIC_GET` / `PUBLIC_POST` và thêm `@SecurityRequirements` (rỗng) vào method.
 - Phân quyền theo role: claim `role` đã map thành `ROLE_*` → dùng `.requestMatchers(...).hasRole("TEACHER")` trong `SecurityConfig` (vd. `ApiPaths.ADMIN_ALL` → `hasRole("ADMIN")`). Muốn dùng `@PreAuthorize("hasRole('ADMIN')")` trên method thì bật `@EnableMethodSecurity` (hiện chưa bật).
 - Xong API: kiểm tra trên Swagger UI (`/swagger-ui.html`), cập nhật bảng API trong README, báo FE thêm `API_ENDPOINTS` + model.
@@ -142,7 +141,8 @@ src/main/resources/db/migration/
   V6__add_change_password_error_code.sql
   V7__create_study_sets.sql
   V8__create_quizzes.sql
-  V9__...                      ← thay đổi tiếp theo luôn là file mới
+  V9__drop_study_sets.sql
+  V10__...                     ← thay đổi tiếp theo luôn là file mới
 ```
 
 - Chạy tự động khi khởi động app (và khi chạy `CharlieQuizletBeApplicationTests`).
