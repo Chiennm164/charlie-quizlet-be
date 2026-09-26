@@ -19,6 +19,9 @@ public final class ApiPaths {
     public static final String AUTH_LOGOUT = AUTH + "/logout";
     public static final String AUTH_CHANGE_PASSWORD = AUTH + "/change-password";
 
+    public static final String STUDY_SETS = API + "/study-sets";
+    public static final String STUDY_SET = STUDY_SETS + "/{id}";
+
     /** Mọi đường dẫn dưới /api/admin chỉ ADMIN gọi được (SecurityConfig). */
     public static final String ADMIN = API + "/admin";
     public static final String ADMIN_ALL = ADMIN + "/**";

@@ -13,7 +13,8 @@ src/main/java/com/charlie/quizlet/
 │   └── error/         # ErrorCode (enum), BusinessException, ErrorCatalog (đọc + cache bảng error_codes)
 ├── auth/              # đăng ký, đăng nhập, JWT, refresh token; reset/ = quên / đặt lại mật khẩu
 ├── user/              # User entity, Role, UserStatus, UserResponse
-└── admin/             # AdminAccountInitializer (tạo Admin lúc khởi động), duyệt tài khoản chờ duyệt
+├── admin/             # AdminAccountInitializer (tạo Admin lúc khởi động), duyệt tài khoản chờ duyệt
+└── studyset/          # học phần (StudySet) + thẻ (Card)
 src/main/resources/
 ├── application.yml                 # cấu hình (app.* -> AppProperties)
 ├── ValidationMessages_vi.properties  # câu lỗi validate tiếng Việt
@@ -136,7 +137,8 @@ src/main/resources/db/migration/
   V4__create_refresh_tokens.sql
   V5__add_admin_error_codes.sql
   V6__add_change_password_error_code.sql
-  V7__...                      ← thay đổi tiếp theo luôn là file mới
+  V7__create_study_sets.sql
+  V8__...                      ← thay đổi tiếp theo luôn là file mới
 ```
 
 - Chạy tự động khi khởi động app (và khi chạy `CharlieQuizletBeApplicationTests`).

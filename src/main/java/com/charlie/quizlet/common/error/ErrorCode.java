@@ -26,7 +26,11 @@ public enum ErrorCode {
     AUTH_REFRESH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "Your session has expired"),
     AUTH_CURRENT_PASSWORD_INCORRECT(HttpStatus.BAD_REQUEST, "Current password is incorrect"),
 
-    ADMIN_USER_NOT_PENDING(HttpStatus.CONFLICT, "This account is not waiting for approval");
+    ADMIN_USER_NOT_PENDING(HttpStatus.CONFLICT, "This account is not waiting for approval"),
+
+    STUDY_SET_NOT_FOUND(HttpStatus.NOT_FOUND, "Study set not found"),
+    STUDY_SET_DUPLICATE_TERM(HttpStatus.BAD_REQUEST, "Some terms are duplicated"),
+    STUDY_SET_CARD_NOT_FOUND(HttpStatus.BAD_REQUEST, "A card does not belong to this study set");
 
     private final HttpStatus defaultStatus;
     private final String defaultMessage;
