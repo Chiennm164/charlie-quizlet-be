@@ -27,12 +27,28 @@ public final class ApiPaths {
     public static final String QUIZ = QUIZZES + "/{id}";
     /** Home: bộ đề đã xuất bản nhóm theo chủ đề. */
     public static final String QUIZZES_BY_TOPIC = QUIZZES + "/by-topic";
+    /** Bắt đầu lượt làm / lịch sử làm của người gọi. */
+    public static final String QUIZ_ATTEMPTS = QUIZ + "/attempts";
+
+    /** Lượt làm bài: chỉ người làm xem / sửa được (AttemptService). */
+    public static final String ATTEMPTS = API + "/attempts";
+    public static final String ATTEMPT = ATTEMPTS + "/{id}";
+    public static final String ATTEMPT_ANSWER = ATTEMPT + "/answers/{questionId}";
+    public static final String ATTEMPT_SUBMIT = ATTEMPT + "/submit";
+
+    /** Dữ liệu riêng của người gọi: lịch sử làm bài, tiến độ theo đề, bộ đề yêu thích. */
+    public static final String ME = API + "/me";
+    public static final String ME_ATTEMPTS = ME + "/attempts";
+    public static final String ME_QUIZ_MARKS = ME + "/quiz-marks";
+    public static final String ME_FAVORITE = ME + "/favorites/{quizId}";
 
     /** Mọi đường dẫn dưới /api/admin chỉ ADMIN gọi được (SecurityConfig). */
     public static final String ADMIN = API + "/admin";
     public static final String ADMIN_ALL = ADMIN + "/**";
     /** Mọi bộ đề, cả nháp — màn quản lý của Admin. */
     public static final String ADMIN_QUIZZES = ADMIN + "/quizzes";
+    /** Thống kê 1 bộ đề: lượt làm, điểm trung bình, từng câu / đáp án. */
+    public static final String ADMIN_QUIZ_STATS = ADMIN_QUIZZES + "/{id}/stats";
     public static final String ADMIN_TOPICS = ADMIN + "/topics";
     public static final String ADMIN_TOPIC = ADMIN_TOPICS + "/{id}";
 

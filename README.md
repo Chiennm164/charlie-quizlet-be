@@ -38,6 +38,8 @@ Cấu hình qua biến môi trường (mặc định trong `application.yml`, đ
 `FRONTEND_URL` (mặc định `http://localhost:4200`, dùng để tạo link đặt lại mật khẩu),
 `PASSWORD_RESET_TOKEN_TTL` (mặc định `PT30M`),
 `ERROR_CODES_CACHE_TTL` (mặc định `PT5M` — thời gian cache bảng `error_codes`),
+`DEFAULT_EXAM_QUESTION_COUNT` (mặc định `30` — số câu mỗi lượt thi thử khi bộ đề không tự đặt; FE hiện gợi ý theo
+`APP_SETTINGS.quizzes.defaultExamQuestionCount`, đổi thì sửa cả 2),
 `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_FULL_NAME` (tài khoản Admin tạo lúc khởi động nếu email chưa có; mặc định dev
 `admin@charlie-quizlet.local` / `admin12345` — **bắt buộc đổi mật khẩu khi deploy**, hoặc để `ADMIN_EMAIL` rỗng để không tạo).
 
@@ -81,10 +83,10 @@ Danh sách phẳng, tên không trùng (không phân biệt hoa thường). Mỗ
 
 | Method | Path | Mô tả |
 |---|---|---|
-| GET | `/api/quizzes/by-topic?limit=8` | **Home**: chủ đề có đề đã xuất bản (A → Z), mỗi chủ đề `{topic, totalQuizzes, quizzes}` — tối đa `limit` (1–20) đề mới nhất |
-| GET | `/api/quizzes?topicId=&q=&sort=&page=&size=` | Đề đã xuất bản, lọc theo chủ đề. `sort`: `RECENT` \| `NEWEST` \| `TITLE` |
+| GET | `/api/quizzes/by-topic?limit=8&q=&mark=&sort=` | **Home / trang Bộ đề xem theo nhóm**: chủ đề có đề đã xuất bản khớp `q` (A → Z), mỗi chủ đề `{topic, totalQuizzes, quizzes}` — tối đa `limit` (1–20) đề theo `sort` (mặc định `RECENT`) |
+| GET | `/api/quizzes?topicId=&q=&mark=&sort=&page=&size=` | Đề đã xuất bản, lọc theo chủ đề. `mark`: `ALL` \| `NOT_TAKEN` (người gọi chưa nộp lần nào) \| `FAVORITE`. `sort`: `RECENT` \| `NEWEST` \| `TITLE` |
 | GET | `/api/admin/quizzes?status=&topicId=&q=&sort=&page=&size=` | Mọi đề, cả nháp (ADMIN) |
-| POST | `/api/quizzes` | `{topicId, title, description?, timeLimitMinutes?, status, questions: [{content, explanation?, options: [{content, correct}]}]}` → 201 |
+| POST | `/api/quizzes` | `{topicId, title, description?, timeLimitMinutes?, examQuestionCount?, status, questions: [{content, explanation?, options: [{content, correct}]}]}` → 201 |
 | GET | `/api/quizzes/{id}` | Bộ đề (kèm `topic`). `questions` (kèm đáp án đúng) **chỉ có khi `canEdit`** (Admin); học sinh nhận `questions: null` |
 | PUT | `/api/quizzes/{id}` | Gửi toàn bộ câu hỏi theo thứ tự mới; câu / đáp án có `id` được giữ, không có `id` là mới, cũ không gửi bị xoá |
 | DELETE | `/api/quizzes/{id}` | 204, xoá cả câu hỏi |
@@ -92,8 +94,32 @@ Danh sách phẳng, tên không trùng (không phân biệt hoa thường). Mỗ
 - `topicId` không tồn tại → 404 `TOPIC_NOT_FOUND`.
 - `status`: `DRAFT` (lưu được cả khi chưa có câu) \| `PUBLISHED` (cần ≥ 1 câu, không thì 400 `QUIZ_EMPTY`). `publishedAt` giữ lần xuất bản đầu, về nháp thì xoá.
 - `timeLimitMinutes`: 1–300, bỏ trống = không giới hạn. Tối đa 200 câu; mỗi câu 2–6 đáp án.
+- `examQuestionCount`: 1–200, bỏ trống = dùng mặc định `DEFAULT_EXAM_QUESTION_COUNT` (30). Mỗi lượt **thi thử** rút ngẫu
+  nhiên chừng này câu từ ngân hàng (đề ít câu hơn thì lấy hết); luyện tập và "làm lại câu sai" không bị giới hạn.
+  Response có thêm `examDrawCount` = số câu thực tế mỗi lượt thi thử (cấu hình hoặc mặc định, không quá số câu).
 - Mỗi câu **đúng 1** đáp án `correct` (400 `QUIZ_CORRECT_OPTION_REQUIRED`); đáp án trùng trong 1 câu → 400 `QUIZ_DUPLICATE_OPTION`.
 - `id` câu / đáp án không thuộc đề (hoặc gửi 2 lần) → 400 `QUIZ_ITEM_NOT_FOUND`.
+
+## Attempt API (làm bài)
+
+Ai đăng nhập cũng làm được đề đã xuất bản. Mỗi lượt chỉ người làm xem được (người khác 404 `ATTEMPT_NOT_FOUND`).
+Server giữ đáp án đúng và giờ làm bài, chấm điểm khi nộp.
+
+| Method | Path | Mô tả |
+|---|---|---|
+| POST | `/api/quizzes/{id}/attempts` | `{mode: PRACTICE \| EXAM, retryWrongOf?}` → 201. Huỷ lượt dở của đề này (nếu có). `retryWrongOf`: chỉ làm lại câu sai / bỏ trống của lượt đã nộp đó |
+| GET | `/api/quizzes/{id}/attempts` | 20 lượt gần nhất của người gọi (cả lượt dở) |
+| GET | `/api/attempts/{id}` | Lượt làm: câu hỏi (thi thử đã trộn), đáp án đã chọn, `deadline`, `serverTime`. Quá hạn thì tự nộp |
+| PUT | `/api/attempts/{id}/answers/{questionId}` | `{optionId?, flagged}` — tự lưu mỗi lần chọn |
+| POST | `/api/attempts/{id}/submit` | Nộp + chấm (gọi lại khi đã nộp vẫn trả kết quả) |
+| GET | `/api/admin/quizzes/{id}/stats` | **ADMIN**: số lượt nộp (theo chế độ), số người làm, tỉ lệ đúng trung bình; từng câu: số lượt, đúng, bỏ trống, số lượt chọn mỗi đáp án. Không tính lượt Admin làm thử (`preview`) |
+
+- `PRACTICE`: không giờ; trả lời xong thấy ngay đáp án đúng + giải thích, mỗi câu chọn 1 lần (đổi → 409 `ATTEMPT_ANSWER_LOCKED`).
+- `EXAM`: trộn câu và đáp án; đề có `timeLimitMinutes` thì có `deadline`. Quá `deadline` + 30 giây → không lưu được nữa
+  (409 `ATTEMPT_TIME_UP`) và lượt tự nộp với các câu đã lưu.
+- Đáp án đúng / giải thích chỉ có khi đã nộp, hoặc luyện tập với câu đã trả lời.
+- Mỗi người tối đa 1 lượt dở / bộ đề (unique index). Lưu khi đã nộp → 409 `ATTEMPT_ALREADY_SUBMITTED`;
+  câu / đáp án không thuộc lượt → 400 `ATTEMPT_INVALID_ANSWER`; làm lại câu sai khi không có câu sai → 400 `ATTEMPT_NOTHING_TO_RETRY`.
 
 **Refresh token:**
 
@@ -107,6 +133,16 @@ Danh sách phẳng, tên không trùng (không phân biệt hoa thường). Mỗ
 > Chưa có SMTP: link đặt lại mật khẩu được **ghi ra log** (`Password reset link for ...`).
 > Khi có mail server, thay `LoggingPasswordResetNotifier` bằng một implementation gửi mail của `PasswordResetNotifier`.
 
+## Me API (dữ liệu của người gọi)
+
+| Method | Path | Mô tả |
+|---|---|---|
+| GET | `/api/me/attempts?status=&mode=&topicId=&page=&size=` | Lịch sử làm bài kèm tên đề / chủ đề. `status`: `SUBMITTED` (mặc định, mới nộp trước) \| `IN_PROGRESS` |
+| GET | `/api/me/quiz-marks` | `{progress: [{quizId, submittedCount, bestPercent, inProgressAttemptId}], favoriteQuizIds}` — dấu trên thẻ đề |
+| PUT / DELETE | `/api/me/favorites/{quizId}` | Thêm / bỏ yêu thích (gọi lại không lỗi) → 204 |
+
+Lượt thi đã quá giờ được chấm trước khi trả lịch sử / dấu. Lượt làm của Admin có `preview = true` (làm thử).
+
 ## Lỗi API
 
 Mọi lỗi (nghiệp vụ, validate, lỗi Spring MVC, 401/403 của Spring Security, lỗi không lường trước) đều trả
@@ -118,6 +154,7 @@ Mọi lỗi (nghiệp vụ, validate, lỗi Spring MVC, 401/403 của Spring Sec
   "title": "Unauthorized",
   "detail": "Email hoặc mật khẩu không đúng",
   "errorCode": "AUTH_INVALID_CREDENTIALS",
+  "errorDisplayCode": "MCN-01-01",
   "errorMessage": "Email hoặc mật khẩu không đúng",
   "errorDescription": "Kiểm tra lại thông tin đăng nhập hoặc dùng chức năng \"Quên mật khẩu\".",
   "errors": { "email": "..." }
@@ -126,6 +163,10 @@ Mọi lỗi (nghiệp vụ, validate, lỗi Spring MVC, 401/403 của Spring Sec
 
 - `errorMessage` / `errorDescription` lấy từ bảng **`error_codes`** theo header `Accept-Language` (`vi` mặc định, `en`).
 - `errors` chỉ có khi `errorCode = COMMON_VALIDATION_FAILED`.
+- `errorCode` để FE rẽ nhánh; `errorDisplayCode` (**MCN-GG-NN**) là mã hiện cho người dùng, khai báo cạnh từng hằng số
+  trong enum `ErrorCode`: nhóm `00` chung, `01` xác thực / tài khoản, `02` bộ đề, `03` làm bài, `04` chủ đề; `NN` số thứ
+  tự trong nhóm. Đã cấp thì không đổi / không dùng lại (test `ErrorCodeDisplayCodeTest` kiểm tra định dạng, không trùng).
+  FE tự gán `MCN-00-99` cho lỗi mất kết nối.
 - Lỗi không lường trước → `COMMON_INTERNAL_ERROR` (chi tiết chỉ ghi log, không trả về client).
 
 **Bảng `error_codes`** (`V3__create_error_codes.sql`): `code`, `http_status`, `message_vi`, `message_en`,
@@ -162,9 +203,10 @@ src/main/java/com/charlie/quizlet/
 ├── admin/         # tạo Admin lúc khởi động
 ├── topic/         # chủ đề của bộ đề (ADMIN quản lý)
 ├── quiz/          # bộ đề trắc nghiệm: câu hỏi + đáp án (ADMIN soạn)
-└── <feature>/     # question, exam, flashcard...
+├── attempt/       # làm bài (luyện tập / thi thử), chấm điểm, thống kê đề cho Admin
+└── me/            # dữ liệu của người gọi: lịch sử, dấu trên đề, yêu thích
 src/main/resources/
 ├── application.yml
 ├── ValidationMessages_vi.properties   # câu lỗi validate tiếng Việt
-└── db/migration/                      # Flyway: V1 users, V2 password_reset_tokens, V3 error_codes, V4 refresh_tokens, V5–V6 mã lỗi mới, V7 study_sets + cards (đã xoá ở V9), V8 quizzes + questions + question_options, V10 bỏ role TEACHER + topics
+└── db/migration/                      # Flyway: V1 users, V2 password_reset_tokens, V3 error_codes, V4 refresh_tokens, V5–V6 mã lỗi mới, V7 study_sets + cards (đã xoá ở V9), V8 quizzes + questions + question_options, V10 bỏ role TEACHER + topics, V11 quiz_attempts + attempt_answers, V12 index thống kê, V13 quiz_favorites + cờ preview, V14 số câu mỗi lượt thi thử
 ```

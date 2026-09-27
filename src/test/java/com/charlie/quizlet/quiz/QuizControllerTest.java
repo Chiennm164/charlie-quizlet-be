@@ -48,7 +48,7 @@ class QuizControllerTest {
             """;
 
     private static final QuizResponse MATH = new QuizResponse(10L, new QuizResponse.TopicRef(5L, "Toán"), "Math",
-            null, 15, QuizStatus.PUBLISHED, new QuizResponse.Owner(1L, "Admin"), 1, List.of(), true, Instant.EPOCH, Instant.EPOCH, Instant.EPOCH);
+            null, 15, null, 1, QuizStatus.PUBLISHED, new QuizResponse.Owner(1L, "Admin"), 1, List.of(), true, Instant.EPOCH, Instant.EPOCH, Instant.EPOCH);
 
     @Autowired
     private MockMvc mockMvc;
@@ -68,7 +68,8 @@ class QuizControllerTest {
         mockMvc.perform(post("/api/quizzes").header("Authorization", student)
                 .contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.errorCode").value("COMMON_FORBIDDEN"));
+                .andExpect(jsonPath("$.errorCode").value("COMMON_FORBIDDEN"))
+                .andExpect(jsonPath("$.errorDisplayCode").value("MCN-00-04"));
         mockMvc.perform(put("/api/quizzes/10").header("Authorization", student)
                 .contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isForbidden());
@@ -92,7 +93,7 @@ class QuizControllerTest {
 
     @Test
     void studentCanListAndViewPublishedQuizzes() throws Exception {
-        given(quizService.listPublished(null, "", QuizSort.RECENT, 0, 12))
+        given(quizService.listPublished(any(), eq(null), eq(""), eq(QuizMark.ALL), eq(QuizSort.RECENT), eq(0), eq(12)))
                 .willReturn(new PageResponse<>(List.of(), 0, 12, 0, 0));
         given(quizService.get(new CurrentUser(1L, Role.STUDENT), 10L)).willReturn(MATH);
 
@@ -119,7 +120,7 @@ class QuizControllerTest {
 
     @Test
     void byTopicIsOpenToStudentsAndNotMistakenForAnId() throws Exception {
-        given(quizService.listPublishedByTopic(8)).willReturn(List.of(new TopicQuizzesResponse(
+        given(quizService.listPublishedByTopic(any(), eq(8), eq(""), eq(QuizMark.ALL), eq(QuizSort.RECENT))).willReturn(List.of(new TopicQuizzesResponse(
                 new QuizResponse.TopicRef(5L, "Toán"), 1, List.of())));
 
         mockMvc.perform(get("/api/quizzes/by-topic").header("Authorization", bearer(Role.STUDENT)))

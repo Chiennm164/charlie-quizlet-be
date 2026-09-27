@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.charlie.quizlet.auth.CurrentUser;
 import com.charlie.quizlet.common.SearchPatterns;
+import com.charlie.quizlet.config.AppProperties;
 import com.charlie.quizlet.common.dto.PageRequests;
 import com.charlie.quizlet.common.dto.PageResponse;
 import com.charlie.quizlet.common.error.BusinessException;
@@ -47,6 +48,7 @@ public class QuizService {
     private final UserRepository userRepository;
     private final TopicService topicService;
     private final Clock clock;
+    private final AppProperties appProperties;
 
     @Transactional
     public QuizResponse create(CurrentUser user, QuizRequest request) {
@@ -56,13 +58,13 @@ public class QuizService {
         Quiz quiz = new Quiz();
         quiz.setOwner(owner);
         applyRequest(quiz, request);
-        return QuizResponse.from(quizRepository.saveAndFlush(quiz), true);
+        return QuizResponse.from(quizRepository.saveAndFlush(quiz), true, examDrawCount(quiz));
     }
 
     @Transactional(readOnly = true)
     public QuizResponse get(CurrentUser user, Long id) {
         Quiz quiz = findViewable(user, id);
-        return QuizResponse.from(quiz, user.isAdmin());
+        return QuizResponse.from(quiz, user.isAdmin(), examDrawCount(quiz));
     }
 
     @Transactional
@@ -71,7 +73,7 @@ public class QuizService {
         applyRequest(quiz, request);
         // Flush để câu hỏi / đáp án mới có id trước khi trả về.
         quizRepository.flush();
-        return QuizResponse.from(quiz, true);
+        return QuizResponse.from(quiz, true, examDrawCount(quiz));
     }
 
     @Transactional
@@ -83,39 +85,64 @@ public class QuizService {
     @Transactional(readOnly = true)
     public PageResponse<QuizSummaryResponse> listAll(QuizStatus status, Long topicId, String query, QuizSort sort,
             int page, int size) {
-        return PageResponse.from(quizRepository.findSummaries(status, topicId, SearchPatterns.contains(query),
-                PageRequests.of(page, size, sort.sort())));
+        return PageResponse.from(quizRepository.findSummaries(status, topicId, SearchPatterns.contains(query), null,
+                null, PageRequests.of(page, size, sort.sort())));
     }
 
     /** Bộ đề đã xuất bản — ai đăng nhập cũng xem được. {@code topicId} null = mọi chủ đề. */
     @Transactional(readOnly = true)
-    public PageResponse<QuizSummaryResponse> listPublished(Long topicId, String query, QuizSort sort, int page,
-            int size) {
-        return listAll(QuizStatus.PUBLISHED, topicId, query, sort, page, size);
+    public PageResponse<QuizSummaryResponse> listPublished(CurrentUser user, Long topicId, String query,
+            QuizMark mark, QuizSort sort, int page, int size) {
+        return PageResponse.from(quizRepository.findSummaries(QuizStatus.PUBLISHED, topicId,
+                SearchPatterns.contains(query), mark.notTakenBy(user), mark.favoriteOf(user),
+                PageRequests.of(page, size, sort.sort())));
     }
 
     /**
-     * Home: mỗi chủ đề có đề đã xuất bản kèm tối đa {@code limit} đề mới nhất. Mỗi chủ đề 1 query — số chủ đề nhỏ
-     * (Admin tự tạo), đổi lại không phải nạp hết mọi đề để tự nhóm.
+     * Home / trang Bộ đề xem theo nhóm: mỗi chủ đề có đề đã xuất bản (khớp {@code query}, {@code mark}) kèm tối đa
+     * {@code limit} đề theo {@code sort}. Mỗi chủ đề 1 query — số chủ đề nhỏ (Admin tự tạo), đổi lại không phải nạp
+     * hết mọi đề để tự nhóm.
      */
     @Transactional(readOnly = true)
-    public List<TopicQuizzesResponse> listPublishedByTopic(int limit) {
+    public List<TopicQuizzesResponse> listPublishedByTopic(CurrentUser user, int limit, String query, QuizMark mark,
+            QuizSort sort) {
         int perTopic = Math.clamp(limit, 1, MAX_PER_TOPIC);
-        return quizRepository.findTopicsHavingQuizzes(QuizStatus.PUBLISHED).stream()
+        String titlePattern = SearchPatterns.contains(query);
+        Long notTakenBy = mark.notTakenBy(user);
+        Long favoriteOf = mark.favoriteOf(user);
+        return quizRepository.findTopicsHavingQuizzes(QuizStatus.PUBLISHED, null, titlePattern, notTakenBy,
+                favoriteOf).stream()
                 .map(topic -> {
                     Page<QuizSummaryResponse> page = quizRepository.findSummaries(QuizStatus.PUBLISHED,
-                            topic.getId(), SearchPatterns.contains(null),
-                            PageRequests.of(0, perTopic, QuizSort.RECENT.sort()));
+                            topic.getId(), titlePattern, notTakenBy, favoriteOf,
+                            PageRequests.of(0, perTopic, sort.sort()));
                     return new TopicQuizzesResponse(new QuizResponse.TopicRef(topic.getId(), topic.getName()),
                             page.getTotalElements(), page.getContent());
                 })
                 .toList();
     }
 
-    private Quiz findViewable(CurrentUser user, Long id) {
-        return quizRepository.findById(id)
-                .filter(quiz -> quiz.getStatus() == QuizStatus.PUBLISHED || user.isAdmin())
-                .orElseThrow(() -> new BusinessException(ErrorCode.QUIZ_NOT_FOUND));
+    /**
+     * Số câu mỗi lượt thi thử: đề tự đặt thì theo đề, không thì theo {@code app.attempt.default-exam-question-count};
+     * không vượt quá số câu đang có.
+     */
+    public int examDrawCount(Quiz quiz) {
+        Integer perAttempt = quiz.getExamQuestionCount();
+        int count = perAttempt != null ? perAttempt : appProperties.attempt().defaultExamQuestionCount();
+        return Math.min(count, quiz.getQuestions().size());
+    }
+
+    public Quiz find(Long id) {
+        return quizRepository.findById(id).orElseThrow(() -> new BusinessException(ErrorCode.QUIZ_NOT_FOUND));
+    }
+
+    /** Nháp chỉ Admin thấy; người khác nhận QUIZ_NOT_FOUND như đề không tồn tại. */
+    public Quiz findViewable(CurrentUser user, Long id) {
+        Quiz quiz = find(id);
+        if (quiz.getStatus() != QuizStatus.PUBLISHED && !user.isAdmin()) {
+            throw new BusinessException(ErrorCode.QUIZ_NOT_FOUND);
+        }
+        return quiz;
     }
 
     private void applyRequest(Quiz quiz, QuizRequest request) {
@@ -128,6 +155,7 @@ public class QuizService {
         quiz.setTitle(request.title().trim());
         quiz.setDescription(blankToNull(request.description()));
         quiz.setTimeLimitMinutes(request.timeLimitMinutes());
+        quiz.setExamQuestionCount(request.examQuestionCount());
         // Giữ thời điểm xuất bản lần đầu khi sửa đề đang xuất bản; về nháp thì xoá.
         if (request.status() == QuizStatus.PUBLISHED && quiz.getStatus() != QuizStatus.PUBLISHED) {
             quiz.setPublishedAt(clock.instant());

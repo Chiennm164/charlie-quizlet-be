@@ -56,6 +56,13 @@ public class Quiz {
     @Column(name = "time_limit_minutes")
     private Integer timeLimitMinutes;
 
+    /**
+     * Thi thử: mỗi lượt rút ngẫu nhiên chừng này câu từ ngân hàng câu hỏi; {@code null} = làm tất cả. Lớn hơn số câu
+     * đang có thì lấy hết. Luyện tập luôn làm cả ngân hàng.
+     */
+    @Column(name = "exam_question_count")
+    private Integer examQuestionCount;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private QuizStatus status;

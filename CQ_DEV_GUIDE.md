@@ -9,13 +9,15 @@ src/main/java/com/charlie/quizlet/
 ├── config/            # SecurityConfig, JwtConfig, OpenApiConfig, AppConfig (Clock), AppProperties
 ├── common/
 │   ├── ApiPaths       # hằng số đường dẫn API + danh sách endpoint công khai
-│   ├── GlobalExceptionHandler   # mọi lỗi -> problem detail có errorCode
+│   ├── GlobalExceptionHandler   # mọi lỗi -> problem detail có errorCode + errorDisplayCode (MCN-GG-NN)
 │   └── error/         # ErrorCode (enum), BusinessException, ErrorCatalog (đọc + cache bảng error_codes)
 ├── auth/              # đăng ký, đăng nhập, JWT, refresh token; reset/ = quên / đặt lại mật khẩu
 ├── user/              # User entity, Role, UserStatus, UserResponse
-├── admin/             # AdminAccountInitializer (tạo Admin lúc khởi động), duyệt tài khoản chờ duyệt
+├── admin/             # AdminAccountInitializer (tạo Admin lúc khởi động)
 ├── topic/             # chủ đề (Topic)
-└── quiz/              # bộ đề (Quiz) + câu hỏi (Question) + đáp án (QuestionOption)
+├── quiz/              # bộ đề (Quiz) + câu hỏi (Question) + đáp án (QuestionOption), lọc QuizMark
+├── attempt/           # làm bài (QuizAttempt, AttemptAnswer), chấm điểm, thống kê đề (QuizStatsService)
+└── me/                # dữ liệu của người gọi: lịch sử làm bài, dấu trên đề, yêu thích (QuizFavorite)
 src/main/resources/
 ├── application.yml                 # cấu hình (app.* -> AppProperties)
 ├── ValidationMessages_vi.properties  # câu lỗi validate tiếng Việt
@@ -60,10 +62,10 @@ public class PasswordResetService {
 }
 ```
 
-**Thêm cấu hình mới** (vd. số câu tối đa mỗi đề):
+**Thêm cấu hình mới** (vd. thời gian ân hạn khi nộp bài trễ, hiện là hằng số 30 giây trong `AttemptService`):
 
-1. `application.yml`: `app.exam.max-questions: ${EXAM_MAX_QUESTIONS:100}`
-2. `AppProperties`: thêm `Exam exam` vào record chính + `public record Exam(int maxQuestions) { ... kiểm tra hợp lệ ... }`
+1. `application.yml`: `app.attempt.deadline-grace: ${ATTEMPT_DEADLINE_GRACE:PT30S}`
+2. `AppProperties`: thêm `Attempt attempt` vào record chính + `public record Attempt(Duration deadlineGrace) { ... kiểm tra hợp lệ ... }`
 3. Test đang tự tạo `AppProperties` thì truyền thêm tham số (`null` cho nhóm không dùng).
 4. Có biến môi trường → thêm vào README.
 
@@ -114,16 +116,17 @@ User user = userRepository.findByEmail(email)
         .orElseThrow(() -> new BusinessException(ErrorCode.AUTH_INVALID_CREDENTIALS));
 ```
 
-**Thêm mã lỗi mới** (vd. `EXAM_ALREADY_SUBMITTED`):
+**Thêm mã lỗi mới** (vd. `ATTEMPT_PAUSED` trong nhóm làm bài `03`, đang có tới `MCN-03-06`):
 
-1. Migration mới `V<n>__add_exam_error_codes.sql`:
+1. Migration mới `V<n>__add_attempt_paused_error_code.sql`:
    ```sql
    INSERT INTO error_codes (code, http_status, message_vi, message_en, description_vi, description_en, note) VALUES
-   ('EXAM_ALREADY_SUBMITTED', 409, 'Bạn đã nộp bài này rồi', 'You have already submitted this exam',
-    'Mỗi đề chỉ được nộp một lần.', 'Each exam can only be submitted once.', NULL);
+   ('ATTEMPT_PAUSED', 409, 'Bài làm đang tạm dừng', 'This attempt is paused',
+    'Tiếp tục bài làm trước khi trả lời.', 'Resume the attempt before answering.', NULL);
    ```
-2. Enum `ErrorCode`: `EXAM_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "You have already submitted this exam"),`
-3. Ném `new BusinessException(ErrorCode.EXAM_ALREADY_SUBMITTED)` trong service + test.
+2. Enum `ErrorCode` kèm **mã hiển thị kế tiếp trong nhóm** (không dùng lại số cũ):
+   `ATTEMPT_PAUSED(HttpStatus.CONFLICT, "This attempt is paused", "MCN-03-07"),`
+3. Ném `new BusinessException(ErrorCode.ATTEMPT_PAUSED)` trong service + test.
 4. FE cần xử lý riêng mã này thì thêm vào `ERROR_CODES` bên FE; không thì FE tự hiện dialog lỗi chung với câu BE trả về.
 
 **Sửa câu thông báo:** sửa trực tiếp bảng `error_codes` (hoặc migration mới cho các môi trường khác) — có hiệu lực sau `ERROR_CODES_CACHE_TTL` (mặc định 5 phút), không cần build lại.
@@ -144,7 +147,11 @@ src/main/resources/db/migration/
   V8__create_quizzes.sql
   V9__drop_study_sets.sql
   V10__drop_teacher_role_add_topics.sql
-  V11__...                     ← thay đổi tiếp theo luôn là file mới
+  V11__create_quiz_attempts.sql
+  V12__index_quiz_attempts_by_quiz.sql
+  V13__favorites_and_preview_attempts.sql
+  V14__quiz_exam_question_count.sql
+  V15__...                     ← thay đổi tiếp theo luôn là file mới
 ```
 
 - Chạy tự động khi khởi động app (và khi chạy `CharlieQuizletBeApplicationTests`).
@@ -174,7 +181,7 @@ Test: `Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)`.
 | Controller | `@WebMvcTest` + `@Import({ AppConfig, SecurityConfig, JwtConfig, JwtService, GlobalExceptionHandler, ErrorCatalog })`, service `@MockitoBean`, `@MockitoBean ErrorCodeRepository` | `AuthControllerTest` |
 | Cấu hình / tài liệu API | `@SpringBootTest` + MockMvc | `OpenApiDocsTest` |
 
-Kiểm tra lỗi bằng `jsonPath("$.errorCode")`, không so câu thông báo (nội dung nằm ở DB, có thể đổi).
+Kiểm tra lỗi bằng `jsonPath("$.errorCode")` (và `$.errorDisplayCode` khi cần), không so câu thông báo (nội dung nằm ở DB, có thể đổi).
 
 ## 8. Chạy & kiểm tra nhanh
 

@@ -12,6 +12,10 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+    properties:
+      # Nạp quan hệ lazy theo lô (1 query cho tối đa 100 phần tử) thay vì từng dòng — tránh N+1 khi duyệt
+      # câu hỏi / đáp án của bộ đề, lượt làm bài.
+      hibernate.default_batch_fetch_size: 100
   flyway:
     enabled: true
   web:
@@ -33,6 +37,9 @@ app:
   error-codes:
     # Thời gian cache bảng error_codes; sửa thông báo lỗi trong DB có hiệu lực sau khoảng này.
     cache-ttl: ${ERROR_CODES_CACHE_TTL:PT5M}
+  attempt:
+    # Số câu mỗi lượt thi thử khi bộ đề không tự đặt (rút ngẫu nhiên từ ngân hàng; đề ít câu hơn thì làm hết).
+    default-exam-question-count: ${DEFAULT_EXAM_QUESTION_COUNT:30}
   admin:
     # Tài khoản Admin tạo lúc khởi động nếu email chưa tồn tại. Mặc định chỉ dùng cho dev;
     # môi trường khác BẮT BUỘC đặt ADMIN_PASSWORD (hoặc để ADMIN_EMAIL rỗng để không tạo).

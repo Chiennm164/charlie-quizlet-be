@@ -40,13 +40,14 @@ public class ErrorCatalog {
         ErrorCodeEntry entry = currentEntries().get(code.name());
         if (entry == null) {
             log.warn("Error code {} is missing from table error_codes, using built-in default", code);
-            return new ResolvedError(code.name(), code.defaultStatus(), code.defaultMessage(), null);
+            return new ResolvedError(code.name(), code.displayCode(), code.defaultStatus(), code.defaultMessage(), null);
         }
 
         boolean english = "en".equalsIgnoreCase(locale.getLanguage());
         HttpStatus status = HttpStatus.resolve(entry.getHttpStatus());
         return new ResolvedError(
                 code.name(),
+                code.displayCode(),
                 status != null ? status : code.defaultStatus(),
                 english ? entry.getMessageEn() : entry.getMessageVi(),
                 english ? entry.getDescriptionEn() : entry.getDescriptionVi());

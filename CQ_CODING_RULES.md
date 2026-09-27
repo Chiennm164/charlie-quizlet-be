@@ -5,7 +5,7 @@ Hướng dẫn kèm code mẫu: [CQ_DEV_GUIDE.md](CQ_DEV_GUIDE.md). Quy tắc FE
 
 ## 1. Cấu trúc package
 
-- Chia theo **tính năng**, không chia theo tầng: `auth/`, `user/`, sau này `question/`, `exam/`, `flashcard/`... Mỗi package tự chứa controller, service, entity, repository, `dto/` của nó.
+- Chia theo **tính năng**, không chia theo tầng: `auth/`, `user/`, `topic/`, `quiz/`, `attempt/`, `me/`... Mỗi package tự chứa controller, service, entity, repository, `dto/` của nó.
 - `config/` — cấu hình Spring (Security, JWT, OpenAPI, `AppProperties`, `Clock`).
 - `common/` — thứ dùng chung mọi tính năng: `GlobalExceptionHandler`, `ApiPaths`, `common/error/` (mã lỗi). Không để logic nghiệp vụ của 1 tính năng trong `common/`.
 - Tính năng con tách package con khi đủ lớn (vd. `auth/reset/` cho quên / đặt lại mật khẩu).
@@ -23,7 +23,8 @@ Hướng dẫn kèm code mẫu: [CQ_DEV_GUIDE.md](CQ_DEV_GUIDE.md). Quy tắc FE
 ## 3. Lỗi
 
 - Lỗi nghiệp vụ ném `new BusinessException(ErrorCode.X)`. **Không** ném `ResponseStatusException`, không tự dựng `ResponseEntity` lỗi trong controller.
-- Mọi mã lỗi có trong **cả** enum `ErrorCode` **và** bảng `error_codes` (migration). Tên mã `NHÓM_MÔ_TẢ` (`AUTH_INVALID_CREDENTIALS`, `EXAM_ALREADY_SUBMITTED`...).
+- Mọi mã lỗi có trong **cả** enum `ErrorCode` **và** bảng `error_codes` (migration). Tên mã `NHÓM_MÔ_TẢ` (`AUTH_INVALID_CREDENTIALS`, `ATTEMPT_ALREADY_SUBMITTED`...).
+- Mỗi mã lỗi kèm **mã hiển thị** `MCN-GG-NN` trong enum (nhóm `00` chung, `01` xác thực / tài khoản, `02` bộ đề, `03` làm bài, `04` chủ đề; `NN` = số kế tiếp trong nhóm) — trả về FE ở `errorDisplayCode`, là mã duy nhất người dùng thấy. Đã cấp thì không đổi / không dùng lại; nhóm mới thêm vào cả enum lẫn `ErrorCodeDisplayCodeTest`.
 - Nội dung thông báo cho người dùng nằm trong DB (`message_vi/en`, `description_vi/en`) — không hardcode câu thông báo trong Java. Enum chỉ giữ câu tiếng Anh dự phòng.
 - Lỗi không lường trước để `GlobalExceptionHandler` trả `COMMON_INTERNAL_ERROR`; chi tiết chỉ ghi log, **không** trả stack trace / câu lỗi kỹ thuật ra client.
 - Không lộ thông tin nhạy cảm qua lỗi: đăng nhập sai email hay sai mật khẩu đều `AUTH_INVALID_CREDENTIALS`; "quên mật khẩu" luôn `204`.
@@ -37,6 +38,8 @@ Hướng dẫn kèm code mẫu: [CQ_DEV_GUIDE.md](CQ_DEV_GUIDE.md). Quy tắc FE
 - Lưu thời gian kiểu `Instant` ↔ cột `TIMESTAMPTZ`.
 - Chuẩn hoá dữ liệu đầu vào ở service (vd. email `trim().toLowerCase(Locale.ROOT)`).
 - Enum lưu DB dạng chuỗi (`@Enumerated(EnumType.STRING)`) + `CHECK` constraint trong migration.
+- Quan hệ lazy duyệt trong vòng lặp dựa vào `hibernate.default_batch_fetch_size` (đã bật, nạp theo lô) — không tự viết vòng lặp gọi repository từng phần tử. Đếm / thống kê gom ở DB (query `count` / `sum` / `group by`), không nạp từng entity lên để đếm; bộ lọc thường dùng có index.
+- Quy tắc truy cập dùng chung đặt 1 chỗ và gọi lại (vd. `QuizService.findViewable`: nháp chỉ Admin thấy) — không chép lại điều kiện ở service khác.
 
 ## 5. Database & migration
 

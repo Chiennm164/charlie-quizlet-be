@@ -44,22 +44,29 @@ public class QuizController {
     @Operation(summary = "List published quizzes", description = "Filter by topic, search by title (case-insensitive), sort and paginate.")
     @ApiResponse(responseCode = "200", description = "One page of quizzes")
     @ApiResponse(responseCode = "401", description = "Missing, invalid or expired token", content = @Content(schema = @Schema(implementation = ProblemDetail.class)))
-    public PageResponse<QuizSummaryResponse> listPublished(
+    public PageResponse<QuizSummaryResponse> listPublished(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
             @Parameter(description = "Only this topic") @RequestParam(required = false) Long topicId,
             @Parameter(description = "Text contained in the title") @RequestParam(defaultValue = "") String q,
+            @Parameter(description = "ALL, NOT_TAKEN (never submitted by the caller) or FAVORITE")
+            @RequestParam(defaultValue = "ALL") QuizMark mark,
             @RequestParam(defaultValue = "RECENT") QuizSort sort,
             @Parameter(description = "Page number, from 0") @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "Page size, 1-50") @RequestParam(defaultValue = "12") int size) {
-        return quizService.listPublished(topicId, q, sort, page, size);
+        return quizService.listPublished(CurrentUser.from(jwt), topicId, q, mark, sort, page, size);
     }
 
     @GetMapping(ApiPaths.QUIZZES_BY_TOPIC)
-    @Operation(summary = "Published quizzes grouped by topic (home page)",
-            description = "Only topics with published quizzes, A → Z. Each has its latest quizzes and the total count.")
+    @Operation(summary = "Published quizzes grouped by topic (home page, grouped browse view)",
+            description = "Only topics with matching published quizzes, A → Z. Each has up to `limit` quizzes in "
+                    + "`sort` order and the total count of matching quizzes.")
     @ApiResponse(responseCode = "200", description = "Topics with quizzes")
     public List<TopicQuizzesResponse> listPublishedByTopic(
-            @Parameter(description = "Max quizzes per topic, 1-20") @RequestParam(defaultValue = "8") int limit) {
-        return quizService.listPublishedByTopic(limit);
+            @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+            @Parameter(description = "Max quizzes per topic, 1-20") @RequestParam(defaultValue = "8") int limit,
+            @Parameter(description = "Text contained in the title") @RequestParam(defaultValue = "") String q,
+            @Parameter(description = "ALL, NOT_TAKEN or FAVORITE") @RequestParam(defaultValue = "ALL") QuizMark mark,
+            @RequestParam(defaultValue = "RECENT") QuizSort sort) {
+        return quizService.listPublishedByTopic(CurrentUser.from(jwt), limit, q, mark, sort);
     }
 
     @GetMapping(ApiPaths.ADMIN_QUIZZES)

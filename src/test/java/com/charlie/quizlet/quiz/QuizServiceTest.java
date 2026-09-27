@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -22,6 +23,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import com.charlie.quizlet.config.AppProperties;
 import com.charlie.quizlet.auth.CurrentUser;
 import com.charlie.quizlet.common.error.BusinessException;
 import com.charlie.quizlet.common.error.ErrorCode;
@@ -48,7 +50,7 @@ class QuizServiceTest {
     private final UserRepository userRepository = mock(UserRepository.class);
     private final TopicService topicService = mock(TopicService.class);
     private final QuizService service = new QuizService(quizRepository, userRepository, topicService,
-            Clock.fixed(NOW, ZoneOffset.UTC));
+            Clock.fixed(NOW, ZoneOffset.UTC), new AppProperties(null, null, null, null, null, new AppProperties.Attempt(30)));
 
     @BeforeEach
     void setUp() {
@@ -146,28 +148,54 @@ class QuizServiceTest {
     void unknownTopicIsRejected() {
         given(userRepository.findById(1L)).willReturn(Optional.of(user(1L)));
 
-        assertErrorCode(() -> service.create(AUTHOR, new QuizRequest(99L, "Math", null, null, QuizStatus.DRAFT,
+        assertErrorCode(() -> service.create(AUTHOR, new QuizRequest(99L, "Math", null, null, null, QuizStatus.DRAFT,
                 List.of())), ErrorCode.TOPIC_NOT_FOUND);
         verify(quizRepository, never()).saveAndFlush(any());
     }
 
     @Test
     void byTopicListsLatestPublishedQuizzesPerTopic() {
-        given(quizRepository.findTopicsHavingQuizzes(QuizStatus.PUBLISHED))
+        given(quizRepository.findTopicsHavingQuizzes(QuizStatus.PUBLISHED, null, "%%", null, null))
                 .willReturn(List.of(topic(5L, "Toán"), topic(6L, "Văn")));
-        given(quizRepository.findSummaries(eq(QuizStatus.PUBLISHED), eq(5L), eq("%%"), any()))
+        given(quizRepository.findSummaries(eq(QuizStatus.PUBLISHED), eq(5L), eq("%%"), isNull(), isNull(), any()))
                 .willReturn(new PageImpl<>(List.of(summary(1L)), PageRequest.of(0, 1), 9));
-        given(quizRepository.findSummaries(eq(QuizStatus.PUBLISHED), eq(6L), eq("%%"), any()))
+        given(quizRepository.findSummaries(eq(QuizStatus.PUBLISHED), eq(6L), eq("%%"), isNull(), isNull(), any()))
                 .willReturn(new PageImpl<>(List.of(summary(2L)), PageRequest.of(0, 1), 1));
 
-        List<TopicQuizzesResponse> res = service.listPublishedByTopic(999);
+        List<TopicQuizzesResponse> res = service.listPublishedByTopic(STUDENT, 999, null, QuizMark.ALL, QuizSort.RECENT);
 
         assertThat(res).extracting(t -> t.topic().name()).containsExactly("Toán", "Văn");
         assertThat(res.get(0).totalQuizzes()).isEqualTo(9);
         assertThat(res.get(0).quizzes()).extracting(QuizSummaryResponse::id).containsExactly(1L);
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
-        verify(quizRepository).findSummaries(eq(QuizStatus.PUBLISHED), eq(5L), eq("%%"), pageable.capture());
+        verify(quizRepository).findSummaries(eq(QuizStatus.PUBLISHED), eq(5L), eq("%%"), isNull(), isNull(), pageable.capture());
         assertThat(pageable.getValue().getPageSize()).isEqualTo(QuizService.MAX_PER_TOPIC);
+    }
+
+    @Test
+    void byTopicFiltersByTitleAndSortsWithinEachTopic() {
+        given(quizRepository.findTopicsHavingQuizzes(QuizStatus.PUBLISHED, null, "%đại số%", null, null))
+                .willReturn(List.of(topic(5L, "Toán")));
+        given(quizRepository.findSummaries(eq(QuizStatus.PUBLISHED), eq(5L), eq("%đại số%"), isNull(), isNull(), any()))
+                .willReturn(new PageImpl<>(List.of(summary(1L)), PageRequest.of(0, 8), 1));
+
+        assertThat(service.listPublishedByTopic(STUDENT, 8, " Đại số ", QuizMark.ALL, QuizSort.TITLE)).hasSize(1);
+
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(quizRepository).findSummaries(eq(QuizStatus.PUBLISHED), eq(5L), eq("%đại số%"), isNull(), isNull(), pageable.capture());
+        assertThat(pageable.getValue().getSort()).isEqualTo(QuizSort.TITLE.sort());
+    }
+
+    @Test
+    void notTakenAndFavoriteFiltersUseTheCaller() {
+        given(quizRepository.findSummaries(any(), any(), any(), any(), any(), any()))
+                .willReturn(new PageImpl<>(List.of(), PageRequest.of(0, 12), 0));
+
+        service.listPublished(STUDENT, null, "", QuizMark.NOT_TAKEN, QuizSort.RECENT, 0, 12);
+        verify(quizRepository).findSummaries(eq(QuizStatus.PUBLISHED), isNull(), eq("%%"), eq(3L), isNull(), any());
+
+        service.listPublished(STUDENT, null, "", QuizMark.FAVORITE, QuizSort.RECENT, 0, 12);
+        verify(quizRepository).findSummaries(eq(QuizStatus.PUBLISHED), isNull(), eq("%%"), isNull(), eq(3L), any());
     }
 
     @Test
@@ -245,7 +273,7 @@ class QuizServiceTest {
     }
 
     private static QuizRequest request(QuizStatus status, QuestionRequest... questions) {
-        return new QuizRequest(5L, "Math", null, 15, status, List.of(questions));
+        return new QuizRequest(5L, "Math", null, 15, null, status, List.of(questions));
     }
 
     private static QuestionRequest question(Long id, String content, OptionRequest... options) {

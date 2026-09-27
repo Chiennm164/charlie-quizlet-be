@@ -12,7 +12,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties(prefix = "app")
 public record AppProperties(Frontend frontend, Cors cors, PasswordReset passwordReset, ErrorCodes errorCodes,
-        Admin admin) {
+        Admin admin, Attempt attempt) {
 
     /** Ứng dụng Angular — dùng để tạo link gửi cho người dùng. */
     public record Frontend(String url, String resetPasswordPath) {
@@ -68,6 +68,19 @@ public record AppProperties(Frontend frontend, Cors cors, PasswordReset password
 
         public boolean enabled() {
             return email != null && !email.isBlank();
+        }
+    }
+
+    /**
+     * Làm bài. {@code defaultExamQuestionCount}: số câu mỗi lượt thi thử khi bộ đề không tự đặt
+     * ({@code quizzes.exam_question_count} trống) — rút ngẫu nhiên từ ngân hàng; đề ít câu hơn thì làm hết.
+     */
+    public record Attempt(int defaultExamQuestionCount) {
+
+        public Attempt {
+            if (defaultExamQuestionCount < 1 || defaultExamQuestionCount > 200) {
+                throw new IllegalArgumentException("app.attempt.default-exam-question-count must be 1-200");
+            }
         }
     }
 }

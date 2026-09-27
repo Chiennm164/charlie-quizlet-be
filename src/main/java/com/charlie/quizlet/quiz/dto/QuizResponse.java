@@ -12,8 +12,11 @@ import com.charlie.quizlet.quiz.QuizStatus;
  * @param questions chỉ có khi {@code canEdit} (Admin, kèm đáp án đúng); người khác nhận {@code null} —
  *                  họ làm bài qua API làm bài, không được thấy đáp án trước
  * @param canEdit   người gọi sửa / xoá được bộ đề này (ADMIN)
+ * @param examQuestionCount cấu hình riêng của đề: số câu mỗi lượt thi thử; {@code null} = dùng mặc định của hệ thống
+ * @param examDrawCount     số câu thực tế mỗi lượt thi thử (cấu hình hoặc mặc định, không quá số câu đang có)
  */
 public record QuizResponse(Long id, TopicRef topic, String title, String description, Integer timeLimitMinutes,
+        Integer examQuestionCount, int examDrawCount,
         QuizStatus status, Owner owner, int questionCount, List<QuestionResponse> questions, boolean canEdit, Instant createdAt,
         Instant updatedAt, Instant publishedAt) {
 
@@ -38,9 +41,9 @@ public record QuizResponse(Long id, TopicRef topic, String title, String descrip
         }
     }
 
-    public static QuizResponse from(Quiz quiz, boolean canEdit) {
+    public static QuizResponse from(Quiz quiz, boolean canEdit, int examDrawCount) {
         return new QuizResponse(quiz.getId(), new TopicRef(quiz.getTopic().getId(), quiz.getTopic().getName()),
-                quiz.getTitle(), quiz.getDescription(), quiz.getTimeLimitMinutes(),
+                quiz.getTitle(), quiz.getDescription(), quiz.getTimeLimitMinutes(), quiz.getExamQuestionCount(), examDrawCount,
                 quiz.getStatus(), new Owner(quiz.getOwner().getId(), quiz.getOwner().getFullName()),
                 quiz.getQuestions().size(),
                 canEdit ? quiz.getQuestions().stream().map(QuestionResponse::from).toList() : null,

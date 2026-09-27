@@ -44,7 +44,7 @@ class PasswordResetServiceTest {
     void setUp() {
         AppProperties props = new AppProperties(
                 new AppProperties.Frontend("http://localhost:4200/", "/reset-password"), null,
-                new AppProperties.PasswordReset(Duration.ofMinutes(30)), null, null);
+                new AppProperties.PasswordReset(Duration.ofMinutes(30)), null, null, null);
         service = new PasswordResetService(userRepository, tokenRepository, refreshTokenRepository, notifier,
                 passwordEncoder, Clock.fixed(NOW, ZoneOffset.UTC), props);
         alice = new User();

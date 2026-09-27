@@ -25,11 +25,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Mọi lỗi API trả về dạng RFC 9457 problem detail, bổ sung 3 thuộc tính cho FE:
+ * Mọi lỗi API trả về dạng RFC 9457 problem detail, bổ sung các thuộc tính cho FE:
  * <pre>
  * {
  *   "status": 401, "title": "Unauthorized", "detail": "Email hoặc mật khẩu không đúng",
- *   "errorCode": "AUTH_INVALID_CREDENTIALS",
+ *   "errorCode": "AUTH_INVALID_CREDENTIALS",   // FE rẽ nhánh theo mã này
+ *   "errorDisplayCode": "MCN-01-01",           // mã hiện cho người dùng
  *   "errorMessage": "Email hoặc mật khẩu không đúng",
  *   "errorDescription": "Kiểm tra lại thông tin đăng nhập hoặc dùng chức năng \"Quên mật khẩu\".",
  *   "errors": { "email": "..." }            // chỉ có khi COMMON_VALIDATION_FAILED
@@ -43,6 +44,7 @@ import lombok.extern.slf4j.Slf4j;
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     public static final String ERROR_CODE = "errorCode";
+    public static final String ERROR_DISPLAY_CODE = "errorDisplayCode";
     public static final String ERROR_MESSAGE = "errorMessage";
     public static final String ERROR_DESCRIPTION = "errorDescription";
 
@@ -106,6 +108,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     private static void applyError(ProblemDetail problem, ResolvedError error) {
         problem.setDetail(error.message());
         problem.setProperty(ERROR_CODE, error.code());
+        problem.setProperty(ERROR_DISPLAY_CODE, error.displayCode());
         problem.setProperty(ERROR_MESSAGE, error.message());
         problem.setProperty(ERROR_DESCRIPTION, error.description());
     }
